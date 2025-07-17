@@ -1,0 +1,135 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Purchase Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+<!-- CSS from /static/styles.css -->
+<link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>  <div class="dashboard-container">
+  <header>Purchase Dashboard</header>
+
+  <div class="upload-bar d-flex gap-3 flex-wrap mb-3 uploadpaddingbottom">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#budgetModal">Upload Purchase</button>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#stockModal">Upload Stock</button>
+  </div>
+  <div class="framofdashbord"></div>
+  <div class="filter-bar mb-3" id="filters"></div>
+  <div class="cards" id="summaryCards"></div>
+  <div class="legend mb-3" id="legend"></div>
+
+  <div class="tabs mb-2">
+    <button class="tab-button active" onclick="switchTab('details')">Detail Table</button>
+    <button class="tab-button" onclick="switchTab('supplier')">Supplier Summary</button>
+  </div>
+
+  <div class="tab-content active" id="details">
+    <div class="scroll-table-wrapper">
+      <table id="dataTable"></table>
+    </div>
+  </div>
+
+  <div class="tab-content" id="supplier">
+    <div class="scroll-table-wrapper">
+      <table id="supplierTable"></table>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Update Status, Remark & Date</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="editId" />
+          <div class="mb-3">
+            <label for="editStatus" class="form-label">Status</label>
+            <select class="form-select" id="editStatus">
+              <option value="PO Pending">PO Pending</option>
+              <option value="PO Raised">PO Raised</option>
+              <option value="Vendor Issue">Vendor Issue</option>
+              <option value="Payment Issue">Payment Issue</option>
+              <option value="Stock in Transit">Stock in Transit</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="editDate" class="form-label">Date</label>
+            <input type="date" class="form-control" id="editDate" />
+          </div>
+          <div class="mb-3">
+            <label for="editRemark" class="form-label">Remark</label>
+            <textarea class="form-control" id="editRemark" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Purchase Modal -->
+  <div class="modal fade" id="budgetModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Upload Purchased Excel</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="file" id="budgetFile" accept=".xlsx,.xls" class="form-control mb-3">
+          <button class="btn btn-outline-success w-100" onclick="downloadTemplate('purchased')">⬇ Download Purchased Template</button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" onclick="uploadBudget()">Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Stock Modal -->
+  <div class="modal fade" id="stockModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Upload Stock Excel</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="file" id="stockFile" accept=".xlsx,.xls" class="form-control mb-3">
+          <button class="btn btn-outline-success w-100" onclick="downloadTemplate('stock')">⬇ Download Stock Template</button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" onclick="uploadStock()">Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Toast -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
+    <div id="uploadToast" class="toast align-items-center text-white bg-success border-0" role="alert">
+      <div class="d-flex">
+        <div class="toast-body" id="toastMessage">✅ Upload successful!</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>
+  </div>
+ </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- JS from /static/scripts.js -->
+<script src="/scripts.js"></script>
+</body>
+  </div>
+</html>
