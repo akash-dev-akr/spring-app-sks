@@ -292,7 +292,7 @@ function buildFilters(data) {
     
     <button class="btn btn-secondary custom-btn" onclick="resetFilters()">Reset</button>
   `;
-{/* <button class="btn btn-primary custom-btn" onclick="applySearchFilters()">Search</button> */}
+
 
   document.querySelectorAll('.filter-select').forEach(select => {
     select.addEventListener('change', () => {
