@@ -57,7 +57,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	@Override
 	public Map<String, Object> readAndSaveFromFile(MultipartFile file) {
 		Map<String, Object> response = new HashMap<>();
-		String database = "test";
+		String database = "sri_krishna_db";
 
 		HikariDataSource dataSource = null;
 		Connection conn = null;
@@ -212,7 +212,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	public Map<String, Object> searchFilter(SearchKeys test) {
 		Map<String, Object> response = new HashMap<>();
 		List<purchaseDto> purchaseList = new ArrayList<>();
-		String database = "test";
+		String database = "sri_krishna_db";
 		HikariDataSource newDataSource = null;
 		Connection conn = null;
 		Statement stmt = null;
@@ -305,7 +305,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	public Map<String, Object> statusUpdate(PurchaseStatusUpdate purchase) {
 		Map<String, Object> response = new HashMap<>();
 		int orgid = 1;
-		String database = "test";
+		String database = "sri_krishna_db";
 		HikariDataSource newDataSource = null;
 		Connection conn = null;
 		PreparedStatement stmt = null;
@@ -352,7 +352,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	@Override
 	public byte[] getSampleStockTemplate() {
 		try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream();) {
-			Sheet sheet = workbook.createSheet("Lead");
+			Sheet sheet = workbook.createSheet("Stock");
 			Row headerRow = sheet.createRow(0);
 
 			CellStyle headerCellStyle = sheet.getWorkbook().createCellStyle();
@@ -388,7 +388,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	@Override
 	public byte[] getSamplePurcahsedTemplate() {
 		try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream();) {
-			Sheet sheet = workbook.createSheet("Lead");
+			Sheet sheet = workbook.createSheet("Purcahsed");
 			Row headerRow = sheet.createRow(0);
 
 			CellStyle headerCellStyle = sheet.getWorkbook().createCellStyle();
@@ -424,7 +424,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	@Override
 	public byte[] uploadPurcahseExcel(InputStream inputStream) {
 		int orgid = 1;
-		String database = "test";
+		String database = "sri_krishna_db";
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 
 		try (Workbook workbook = new XSSFWorkbook(inputStream);
@@ -510,7 +510,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	@Override
 	public byte[] uploadStocksExcel(InputStream inputStream) {
 
-		String database = "test";
+		String database = "sri_krishna_db";
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 
 		try (Workbook workbook = new XSSFWorkbook(inputStream);
@@ -608,7 +608,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 	@Override
 	public Map<String, Object> PurchaseUpload(MultipartFile file) {
 		Map<String, Object> response = new HashMap<>();
-		String database = "test";
+		String database = "sri_krishna_db";
 
 		HikariDataSource dataSource = null;
 		Connection conn = null;
