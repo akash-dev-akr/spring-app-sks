@@ -16,8 +16,8 @@
 
     function downloadTemplate(type) {
       const url = type === 'purchased'
-        ? 'http://localhost:8080/api/purchase/downloadpurcahsedtemplete'
-        : 'http://localhost:8080/api/purchase/downloadstocktemplete';
+        ? 'https://spring-app-sks.onrender.com/api/purchase/downloadpurcahsedtemplete'
+        : 'https://spring-app-sks.onrender.com/api/purchase/downloadstocktemplete';
       window.open(url, '_blank');
     }
     function showToast(message, isSuccess = true) {
@@ -39,7 +39,7 @@
       const formData = new FormData();
       formData.append("file", file);
 
-      fetch("http://localhost:8080/api/purchase/purcahseupload", {
+      fetch("https://spring-app-sks.onrender.com/api/purchase/purcahseupload", {
         method: "POST",
         body: formData
       })
@@ -75,7 +75,7 @@
       const formData = new FormData();
       formData.append("file", file);
 
-      fetch("http://localhost:8080/api/purchase/stocksupload", {
+      fetch("https://spring-app-sks.onrender.com/api/purchase/stocksupload", {
         method: "POST",
         body: formData
       })
@@ -111,7 +111,7 @@
       const file = input.files[0];
       const formData = new FormData();
       formData.append("file", file);
-      fetch("http://localhost:8080/api/purchase/upload", {
+      fetch("https://spring-app-sks.onrender.com/api/purchase/upload", {
         method: "POST",
         body: formData
       })
@@ -186,7 +186,7 @@
         return;
       }
 
-      fetch("http://localhost:8080/api/purchase/statusupdate", {
+      fetch("https://spring-app-sks.onrender.com/api/purchase/statusupdate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -215,7 +215,7 @@
 
 
     function loadDashboard() {
-      fetch("http://localhost:8080/api/purchase/search", {
+      fetch("https://spring-app-sks.onrender.com/api/purchase/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}) // 👈 No dates sent
