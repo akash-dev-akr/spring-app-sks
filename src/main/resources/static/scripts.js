@@ -290,10 +290,10 @@ function buildFilters(data) {
     <input type="date" id="fromDate" placeholder="From Date" />
     <input type="date" id="toDate" placeholder="To Date" />
     <button class="btn btn-primary custom-btn" onclick="applySearchFilters()">Search</button>
-    <button class="btn btn-secondary custom-btn" onclick="resetFilters()">Reset</button>
+    
   `;
 
-
+{/* <button class="btn btn-secondary custom-btn" onclick="resetFilters()">Reset</button> */}
   document.querySelectorAll('.filter-select').forEach(select => {
     select.addEventListener('change', () => {
       filters[select.dataset.key] = select.value;
