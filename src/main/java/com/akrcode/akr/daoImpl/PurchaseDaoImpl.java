@@ -351,75 +351,78 @@ public class PurchaseDaoImpl implements PurchaseDao {
 
 	@Override
 	public byte[] getSampleStockTemplate() {
-		try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream();) {
-			Sheet sheet = workbook.createSheet("Stock");
-			Row headerRow = sheet.createRow(0);
+	    try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+	        Sheet sheet = workbook.createSheet("Stock");
+	        Row headerRow = sheet.createRow(0);
 
-			CellStyle headerCellStyle = sheet.getWorkbook().createCellStyle();
-			// fill foreground color ...
-			headerCellStyle.setFillForegroundColor(IndexedColors.SEA_GREEN.index);
-			// and solid fill pattern produces solid grey cell fill
-			headerCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+	        // Create style only once
+	        CellStyle headerCellStyle = workbook.createCellStyle();
+	        headerCellStyle.setFillForegroundColor(IndexedColors.SEA_GREEN.getIndex());
+	        headerCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-			for (int i = 0; i < stocksTemplateHeader.length; i++) {
-				headerRow.createCell(i).setCellValue(stocksTemplateHeader[i]);
-				Cell cell = headerRow.getCell(i);
-				cell.setCellStyle(headerCellStyle);
+	        // Create font only once
+	        Font whiteBoldFont = workbook.createFont();
+	        whiteBoldFont.setColor(IndexedColors.WHITE.getIndex());
+	        whiteBoldFont.setFontHeightInPoints((short) 11);
+	        whiteBoldFont.setBold(true);
 
-				Font redFont = workbook.createFont();
-				redFont.setColor(IndexedColors.WHITE.index);
-				redFont.setFontHeightInPoints((short) 11);
-				redFont.setBold(true);
-				headerCellStyle.setFont(redFont);
-				headerRow.getCell(i).setCellStyle(headerCellStyle);
-			}
-			for (int columnIndex = 0; columnIndex < 28; columnIndex++) {
+	        headerCellStyle.setFont(whiteBoldFont);
 
-				sheet.autoSizeColumn(columnIndex);
-			}
-			workbook.write(out);
+	        // Apply to header
+	        for (int i = 0; i < stocksTemplateHeader.length; i++) {
+	            Cell cell = headerRow.createCell(i);
+	            cell.setCellValue(stocksTemplateHeader[i]);
+	            cell.setCellStyle(headerCellStyle);
+	        }
 
-			return out.toByteArray();
-		} catch (IOException | java.io.IOException e) {
-			throw new RuntimeException("Failed to parse excel file: " + e.getMessage());
-		}
+	        for (int columnIndex = 0; columnIndex < stocksTemplateHeader.length; columnIndex++) {
+	            sheet.autoSizeColumn(columnIndex);
+	        }
+
+	        workbook.write(out);
+	        return out.toByteArray();
+	    } catch (IOException | java.io.IOException e) {
+	        throw new RuntimeException("Failed to generate Stock template: " + e.getMessage());
+	    }
 	}
 
 	@Override
 	public byte[] getSamplePurcahsedTemplate() {
-		try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream();) {
-			Sheet sheet = workbook.createSheet("Purcahsed");
-			Row headerRow = sheet.createRow(0);
+	    try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+	        Sheet sheet = workbook.createSheet("Purcahsed");
+	        Row headerRow = sheet.createRow(0);
 
-			CellStyle headerCellStyle = sheet.getWorkbook().createCellStyle();
-			// fill foreground color ...
-			headerCellStyle.setFillForegroundColor(IndexedColors.SEA_GREEN.index);
-			// and solid fill pattern produces solid grey cell fill
-			headerCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+	        // Create style only once
+	        CellStyle headerCellStyle = workbook.createCellStyle();
+	        headerCellStyle.setFillForegroundColor(IndexedColors.SEA_GREEN.getIndex());
+	        headerCellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
-			for (int i = 0; i < purcahsedTemplateHeader.length; i++) {
-				headerRow.createCell(i).setCellValue(purcahsedTemplateHeader[i]);
-				Cell cell = headerRow.getCell(i);
-				cell.setCellStyle(headerCellStyle);
+	        // Create font only once
+	        Font whiteBoldFont = workbook.createFont();
+	        whiteBoldFont.setColor(IndexedColors.WHITE.getIndex());
+	        whiteBoldFont.setFontHeightInPoints((short) 11);
+	        whiteBoldFont.setBold(true);
 
-				Font redFont = workbook.createFont();
-				redFont.setColor(IndexedColors.WHITE.index);
-				redFont.setFontHeightInPoints((short) 11);
-				redFont.setBold(true);
-				headerCellStyle.setFont(redFont);
-				headerRow.getCell(i).setCellStyle(headerCellStyle);
-			}
-			for (int columnIndex = 0; columnIndex < 28; columnIndex++) {
+	        headerCellStyle.setFont(whiteBoldFont);
 
-				sheet.autoSizeColumn(columnIndex);
-			}
-			workbook.write(out);
+	        // Apply to header
+	        for (int i = 0; i < purcahsedTemplateHeader.length; i++) {
+	            Cell cell = headerRow.createCell(i);
+	            cell.setCellValue(purcahsedTemplateHeader[i]);
+	            cell.setCellStyle(headerCellStyle);
+	        }
 
-			return out.toByteArray();
-		} catch (IOException | java.io.IOException e) {
-			throw new RuntimeException("Failed to parse excel file: " + e.getMessage());
-		}
+	        for (int columnIndex = 0; columnIndex < purcahsedTemplateHeader.length; columnIndex++) {
+	            sheet.autoSizeColumn(columnIndex);
+	        }
+
+	        workbook.write(out);
+	        return out.toByteArray();
+	    } catch (IOException | java.io.IOException e) {
+	        throw new RuntimeException("Failed to generate Purchased template: " + e.getMessage());
+	    }
 	}
+
 
 	@Override
 	public byte[] uploadPurcahseExcel(InputStream inputStream) {
