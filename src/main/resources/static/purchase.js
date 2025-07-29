@@ -16,8 +16,8 @@ function switchTab(tabId) {
 
 function downloadTemplate(type) {
   const url = type === 'purchased'
-    ? 'https://spring-app-sks.onrender.com/api/purchase/downloadpurcahsedtemplete'
-    : 'https://spring-app-sks.onrender.com/api/purchase/downloadstocktemplete';
+    ? 'https://spring-app-sks.onrender.com/purchase/downloadpurcahsedtemplete'
+    : 'https://spring-app-sks.onrender.com/purchase/downloadstocktemplete';
 
   fetch(url)
     .then(response => {
@@ -72,7 +72,7 @@ function uploadBudget() {
   const formData = new FormData();
   formData.append("file", file);
 
-  fetch("https://spring-app-sks.onrender.com/api/purchase/purcahseupload", {
+  fetch("https://spring-app-sks.onrender.com/purchase/purcahseupload", {
     method: "POST",
     body: formData
   })
@@ -108,7 +108,7 @@ function uploadStock() {
   const formData = new FormData();
   formData.append("file", file);
 
-  fetch("https://spring-app-sks.onrender.com/api/purchase/stocksupload", {
+  fetch("https://spring-app-sks.onrender.com/purchase/stocksupload", {
     method: "POST",
     body: formData
   })
@@ -144,7 +144,7 @@ function uploadExcel() {
   const file = input.files[0];
   const formData = new FormData();
   formData.append("file", file);
-  fetch("https://spring-app-sks.onrender.com/api/purchase/upload", {
+  fetch("https://spring-app-sks.onrender.com/purchase/upload", {
     method: "POST",
     body: formData
   })
@@ -204,7 +204,7 @@ function saveEdit() {
     return;
   }
 
-  fetch("https://spring-app-sks.onrender.com/api/purchase/statusupdate", {
+  fetch("https://spring-app-sks.onrender.com/purchase/statusupdate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -250,7 +250,7 @@ function resetFilters() {
 
 
 function loadDashboard() {
-  fetch("https://spring-app-sks.onrender.com/api/purchase/search", {
+  fetch("https://spring-app-sks.onrender.com/purchase/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}) // 👈 No dates sent
@@ -290,7 +290,7 @@ function buildFilters(data) {
     <input type="date" id="fromDate" placeholder="From Date" />
     <input type="date" id="toDate" placeholder="To Date" />
     
-    <button class="btn btn-secondary custom-btn" onclick="resetFilters()">Reset</button>
+    <button class="custom-btn" onclick="resetFilters()">Reset</button>
   `;
 
 

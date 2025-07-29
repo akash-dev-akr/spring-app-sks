@@ -25,7 +25,7 @@ import com.akrcode.akr.model.ContactModel;
 import com.akrcode.akr.service.PurchaseService;
 
 @RestController
-@RequestMapping("/api/purchase")
+@RequestMapping("/purchase")
 @CrossOrigin("*")
 public class PurchaseRestController {
 	@Autowired

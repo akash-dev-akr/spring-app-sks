@@ -4,11 +4,10 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
 @Controller
-public class PurchaseController {
+public class IndentController {
 
-	@GetMapping("/purchase")
-	public String showPurchasePage() {
-		return "forward:/purchase.html"; 
+	@GetMapping("/indent")
+	public String dashboardPage() {
+		return "forward:/indent.html";
 	}
-
 }
