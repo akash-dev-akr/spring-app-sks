@@ -534,7 +534,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 				Cell cell = headerRow.createCell(i);
 				cell.setCellValue(headers[i]);
 				cell.setCellStyle(headerStyle);
-				sheet.autoSizeColumn(i);
+				sheet.setColumnWidth(i, 20 * 256);
 			}
 
 			workbook.write(out);
@@ -566,7 +566,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 				Cell cell = headerRow.createCell(i);
 				cell.setCellValue(headers[i]);
 				cell.setCellStyle(headerStyle);
-				sheet.autoSizeColumn(i);
+				sheet.setColumnWidth(i, 20 * 256);
 			}
 
 			workbook.write(out);

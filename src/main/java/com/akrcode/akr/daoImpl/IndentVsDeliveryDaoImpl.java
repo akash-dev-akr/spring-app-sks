@@ -943,7 +943,7 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 				Cell cell = header.createCell(i);
 				cell.setCellValue(headers[i]);
 				cell.setCellStyle(headerStyle);
-				sheet.autoSizeColumn(i);
+				sheet.setColumnWidth(i, 20 * 256);
 			}
 
 			// Generate file in memory
@@ -995,7 +995,7 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 				Cell cell = header.createCell(i);
 				cell.setCellValue(headers[i]);
 				cell.setCellStyle(headerStyle);
-				sheet.autoSizeColumn(i);
+				sheet.setColumnWidth(i, 20 * 256);
 			}
 
 			// ===== Excel Column Letter Mapping =====
