@@ -456,6 +456,7 @@ tr.blue:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 5px 0;
   z-index: 10000;
+    position: absolute;
 }
 
 .ui-menu-item-wrapper {
@@ -474,7 +475,15 @@ tr.blue:hover {
   color: #1a73e8 !important;
   font-weight: 500;
 }
-
+   .ui-autocomplete {
+      z-index: 1051 !important; /* higher than modal (1050) and table content */
+      position: absolute;
+      background-color: white;
+      border: 1px solid #ddd;
+      max-height: 200px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
 
 /* =======================
    RESPONSIVE DESIGN
