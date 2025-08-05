@@ -3,12 +3,31 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
   <title>Dashboard</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    .fullscreen-logo-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #ffffff;
+    }
+
+    .fullscreen-logo-container img {
+      max-width: 400px;
+      width: 90%;
+    }
+  </style>
 </head>
 <body th:replace="frame :: layoutContent">
-  <section>
-    <div style="display: flex; justify-content: center; align-items: center; height: 80vh; background-color: #1f2faa;">
-      <img th:src="@{/assets/Sks_logo.png}" alt="Sri Krishna Sweets Logo" style="max-width: 400px; width: 90%;" />
-    </div>
+  <section class="fullscreen-logo-container">
+   <img src="/assets/Sks_logo.png" alt="Logo" style="max-width: 400px; width: 90%;" />
+
   </section>
 </body>
 </html>

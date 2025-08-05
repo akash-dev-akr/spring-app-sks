@@ -2,22 +2,105 @@
 
 // ========== PART 1: Utility & Upload Functions ==========
 
-function updateOverallTimestamp() {
-  const now = new Date().toLocaleString();
-  const label = document.getElementById("overallUpdated");
-  if (label) label.innerText = now;
+function setupAutoCompleteFilters() {
+  const fields = {
+    categoryFilter: "category",
+    subcategoryFilter: "sub_category",
+    supplierFilter: "supplier",
+    statusFilter: "status"
+  };
+
+  Object.entries(fields).forEach(([inputId, key]) => {
+    const $input = $(`#${inputId}`);
+
+    $input.autocomplete({
+      source: function (request, response) {
+        const term = request.term || "";
+        $.ajax({
+          url: `https://my-spring-app-ck1f.onrender.com/purchase/autosuggest/${key}`,
+          data: { q: term },
+          success: function (data) {
+            response(data || []);
+          },
+          error: function () {
+            response([]);
+          }
+        });
+      },
+      minLength: 0
+    }).focus(function () {
+      // Trigger suggestions when input is empty
+      $(this).autocomplete("search", "");
+    });
+  });// Ensure autocomplete width matches input
+  $.ui.autocomplete.prototype._resizeMenu = function () {
+    const ul = this.menu.element;
+    ul.outerWidth(this.element.outerWidth());
+  };
+
+} function setupModalAutoCompleteFilters() {
+  const fields = {
+    modalCategory: "category",
+    modalSupplier: "supplier"
+  };
+
+  Object.entries(fields).forEach(([inputId, key]) => {
+    const $input = $(`#${inputId}`);
+
+    // Destroy previous autocomplete to avoid duplicates
+    if ($input.data("ui-autocomplete")) {
+      $input.autocomplete("destroy");
+    }
+
+    $input.autocomplete({
+      source: function (request, response) {
+        $.ajax({
+          url: `https://my-spring-app-ck1f.onrender.com/purchase/autosuggest/${key}`,
+          data: { q: request.term || "" },
+          success: function (data) {
+            const results = Array.isArray(data)
+              ? data.map(item => ({ label: item, value: item }))
+              : [];
+            response(results);
+          },
+          error: function () {
+            response([]);
+          }
+        });
+      },
+      minLength: 0,
+      appendTo: "#overallModal", // ✅ keep dropdown inside modal
+      select: function (event, ui) {
+        $input.val(ui.item.value); // ✅ set selected value
+        return false; // keep it from overwriting manually
+      },
+      focus: function (event, ui) {
+        $input.val(ui.item.label); // show hovered suggestion
+        return false;
+      }
+    });
+
+    // Show dropdown immediately on focus
+    $input.on("focus", function () {
+      $(this).autocomplete("search", "");
+    });
+  });
 }
-function switchTab(tabId) {
-  document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-  document.querySelector(`.tab-button[onclick*="${tabId}"]`).classList.add('active');
-  document.getElementById(tabId).classList.add('active');
-}
+
+// Re-initialize autocomplete every time modal is shown
+$('#overallModal').on('shown.bs.modal', function () {
+  setupModalAutoCompleteFilters();
+});
+
+
+
+// $(document).ready(setupAutoCompleteFilters);
+
 
 function downloadTemplate(type) {
   const url = type === 'purchased'
-    ? 'https://spring-app-sks.onrender.com/purchase/downloadpurcahsedtemplete'
-    : 'https://spring-app-sks.onrender.com/purchase/downloadstocktemplete';
+    ? 'https://my-spring-app-ck1f.onrender.com/purchase/downloadpurcahsedtemplete'
+    : 'https://my-spring-app-ck1f.onrender.com/purchase/downloadstocktemplete';
 
   fetch(url)
     .then(response => {
@@ -52,19 +135,6 @@ function downloadTemplate(type) {
       });
     });
 }
-
-function showToast(message, isSuccess = true) {
-  const toast = document.getElementById('uploadToast');
-  const toastBody = document.getElementById('toastMessage');
-
-  toast.classList.remove('bg-success', 'bg-danger');
-  toast.classList.add(isSuccess ? 'bg-success' : 'bg-danger');
-
-  toastBody.innerText = message;
-  const bsToast = new bootstrap.Toast(toast);
-  bsToast.show();
-}
-
 function uploadBudget() {
   const file = document.getElementById("budgetFile").files[0];
   if (!file) return;
@@ -72,13 +142,16 @@ function uploadBudget() {
   const formData = new FormData();
   formData.append("file", file);
 
-  fetch("https://spring-app-sks.onrender.com/purchase/purcahseupload", {
+  fetch("https://my-spring-app-ck1f.onrender.com/purchase/purcahseupload", {
     method: "POST",
     body: formData
   })
-    .then(response => response.blob())
+    .then(response => {
+      if (!response.ok) throw new Error("Upload failed");
+      return response.blob();
+    })
     .then(blob => {
-      if (blob.size === 0) {
+      if (!blob || blob.size === 0) {
         showToast("❌ Upload failed or returned empty file.", false);
         return;
       }
@@ -92,15 +165,14 @@ function uploadBudget() {
       a.remove();
       URL.revokeObjectURL(url);
 
+      // ✅ Success UI
       document.getElementById("PurchaseUpdated").innerText = new Date().toLocaleString();
       bootstrap.Modal.getInstance(document.getElementById("budgetModal")).hide();
       showToast("✅ Purchase upload successful. Reloading table...");
-
-      setTimeout(() => buildDashboard(), 1000); // ✅ Reload just the dashboard
+      setTimeout(() => buildDashboard(), 1000);
     })
     .catch(() => showToast("❌ Error uploading purchase file.", false));
 }
-
 function uploadStock() {
   const file = document.getElementById("stockFile").files[0];
   if (!file) return;
@@ -108,13 +180,16 @@ function uploadStock() {
   const formData = new FormData();
   formData.append("file", file);
 
-  fetch("https://spring-app-sks.onrender.com/purchase/stocksupload", {
+  fetch("https://my-spring-app-ck1f.onrender.com/purchase/stocksupload", {
     method: "POST",
     body: formData
   })
-    .then(response => response.blob())
+    .then(response => {
+      if (!response.ok) throw new Error("Upload failed");
+      return response.blob();
+    })
     .then(blob => {
-      if (blob.size === 0) {
+      if (!blob || blob.size === 0) {
         showToast("❌ Upload failed or returned empty file.", false);
         return;
       }
@@ -128,40 +203,28 @@ function uploadStock() {
       a.remove();
       URL.revokeObjectURL(url);
 
+      // ✅ Success UI
       document.getElementById("stockUpdated").innerText = new Date().toLocaleString();
       bootstrap.Modal.getInstance(document.getElementById("stockModal")).hide();
       showToast("✅ Stock upload successful. Reloading table...");
-
-      setTimeout(() => buildDashboard(), 1000); // ✅ Reload just the table
+      setTimeout(() => buildDashboard(), 1000);
     })
     .catch(() => showToast("❌ Error uploading stock file.", false));
 }
 
+function toggleOverallUpload() {
+  const overallBtn = document.getElementById('overallUploadBtn');
+  const checkbox = document.getElementById('showOverallUpload');
+  const checkboxContainer = checkbox.closest('.form-check');
 
-function uploadExcel() {
-  const input = document.getElementById('excelInput');
-  if (!input.files || input.files.length === 0) return;
-  const file = input.files[0];
-  const formData = new FormData();
-  formData.append("file", file);
-  fetch("https://spring-app-sks.onrender.com/purchase/upload", {
-    method: "POST",
-    body: formData
-  })
-    .then(res => res.json())
-    .then(json => {
-      if (json.result) {
-        bootstrap.Modal.getInstance(document.getElementById("overallModal")).hide();
-        showToast("✅ Overall uploaded!");
-        loadDashboard(); // optional reload
-      } else {
-        showToast("❌ Upload failed.", false);
-      }
-    })
-    .catch(() => showToast("❌ Upload error.", false));
+  // Show the upload button
+  overallBtn.classList.remove('d-none');
+
+  // Hide the checkbox itself
+  checkboxContainer.classList.add('d-none');
+  setupModalAutoCompleteFilters();
 }
 
-let rawData = [], filters = {}, specialFilter = null;
 const formatter = new Intl.NumberFormat('en-IN');
 
 const normalizeHeader = h => h?.toString().toLowerCase().trim().replace(/[\s_]/g, '');
@@ -192,34 +255,39 @@ function openEditModal(id, status, remark, date) {
 
   new bootstrap.Modal(document.getElementById('editModal')).show();
 }
-
 function saveEdit() {
   const id = document.getElementById('editId').value;
   const status = document.getElementById('editStatus').value;
   const remarks = document.getElementById('editRemark').value;
   const date = document.getElementById('editDate').value;
 
-  if (!id || !status || !date) {
-    showToast("❗ Please fill all fields including date.", false);
-    return;
+  // if (!id || !status) {
+  //   showToast("❗ Please fill required fields (Status).", false);
+  //   return;
+  // }
+
+  const payload = {
+    id: id,
+    status: status,
+    remarks: remarks
+  };
+
+  // Only add `date` if it's filled
+  if (date) {
+    payload.date = date;
   }
 
-  fetch("https://spring-app-sks.onrender.com/purchase/statusupdate", {
+  fetch("https://my-spring-app-ck1f.onrender.com/purchase/statusupdate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: id,
-      status: status,
-      remarks: remarks,
-      date: date
-    })
+    body: JSON.stringify(payload)
   })
     .then(res => res.json())
     .then(json => {
       if (json.result) {
         bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
         showToast("✅ Status updated!");
-        loadDashboard();
+        applyFilters();
       } else {
         showToast("❌ Update failed.", false);
       }
@@ -230,239 +298,190 @@ function saveEdit() {
     });
 }
 
-function switchTab(tabId) {
-  document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-  document.querySelector(`.tab-button[onclick*="${tabId}"]`).classList.add('active');
-  document.getElementById(tabId).classList.add('active');
-}
 
+let filters = {};
+let specialFilter = null;
+let currentPage = 1;
+let totalPages = 1;
+let pageSize = 10;
+let rawData = [];
+let summaryKey = null;
+$(document).ready(function () {
+  applyFilters();
+
+  $("#limitSelector").on("change", function () {
+    pageSize = parseInt($(this).val());
+    currentPage = 1;
+    applyFilters();
+  });
+
+  $("#prevPage").on("click", function () {
+    if (currentPage > 1) {
+      currentPage--;
+      applyFilters();
+    }
+  });
+
+  $("#nextPage").on("click", function () {
+    if (currentPage < totalPages) {
+      currentPage++;
+      applyFilters();
+    }
+  });
+
+  $("#searchBtn").on("click", function () {
+    currentPage = 1;
+    applyFilters();
+  });
+});
 function resetFilters() {
-  filters = {};
-  specialFilter = null;
-  document.querySelectorAll('.filter-select').forEach(sel => sel.value = '');
-  document.getElementById('fromDate').value = '';
-  document.getElementById('toDate').value = '';
-  loadDashboard();
+  // Clear all input values
+  document.getElementById("categoryFilter").value = "";
+  document.getElementById("subcategoryFilter").value = "";
+  document.getElementById("supplierFilter").value = "";
+  document.getElementById("statusFilter").value = "";
+  document.getElementById("filterdate").value = "";
+  summaryKey = null;
+  currentPage = 1;
+  fetchSummaryCards();
+  applyFilters();
 }
 
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
 
-
-
-function loadDashboard() {
-  fetch("https://spring-app-sks.onrender.com/purchase/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}) // 👈 No dates sent
-  }).then(res => res.json()).then(json => {
-    if (json.result && json.purchaseList) {
-      rawData = json.purchaseList;
-      buildFilters(rawData);
-      buildDashboard();
-    } else {
-      alert("No data found.");
-    }
-  }).catch(err => {
-    console.error("Error:", err);
-    alert("❌ Error fetching data.");
-  });
+  document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+  const activeBtn = Array.from(document.querySelectorAll('.tab-button'))
+    .find(btn => btn.textContent.includes(tabId === 'details' ? 'Detail' : 'Supplier'));
+  if (activeBtn) activeBtn.classList.add('active');
 }
 
-function buildFilters(data) {
-  const suppliers = new Set(), statuses = new Set();
-  const categories = new Set(), subcategories = new Set();
-
-  data.forEach(row => {
-    const h = {};
-    for (const key in row) h[normalizeHeader(key)] = row[key];
-    if (h['supplier']) suppliers.add(h['supplier']);
-    if (h['status']) statuses.add(h['status']);
-    if (h['category']) categories.add(h['category']);
-    if (h['subcategory']) subcategories.add(h['subcategory']);
-  });
-
-  const filterBar = document.getElementById('filters');
-  filterBar.innerHTML = `
-    ${createFilterSelect('category', [...categories])}
-    ${createFilterSelect('sub_category', [...subcategories])}
-    ${createFilterSelect('supplier', [...suppliers])}
-    ${createFilterSelect('status', [...statuses])}
-    <input type="date" id="fromDate" placeholder="From Date" />
-    <input type="date" id="toDate" placeholder="To Date" />
-    
-    <button class="custom-btn" onclick="resetFilters()">Reset</button>
-  `;
-
-
-  document.querySelectorAll('.filter-select').forEach(select => {
-    select.addEventListener('change', () => {
-      filters[select.dataset.key] = select.value;
-      buildDashboard();
-    });
-  });
-}
-
-function applyDateFilter() {
-  const from = document.getElementById("fromDate").value;
-  const to = document.getElementById("toDate").value;
-
-  const filtered = rawData.filter(row => {
-    const date = new Date(row.date || row.Date || row.DATE || '');
-    if (isNaN(date)) return false;
-
-    let pass = true;
-
-    if (from) {
-      const fromDate = new Date(from);
-      if (date < fromDate) pass = false;
-    }
-
-    if (to) {
-      const toDate = new Date(to);
-      if (date > toDate) pass = false;
-    }
-
-    return pass;
-  });
-
-  buildFilters(filtered); // Rebuild filters from filtered data
-  loadDashboard();
-}
-
-function createFilterSelect(key, values) {
-  let label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  let html = `<select class="filter-select" data-key="${key}">`;
-  html += `<option value="">All ${label}</option>`;
-  values.sort().forEach(v => html += `<option value="${v}">${v}</option>`);
-  html += '</select>';
-  return html;
-}
-function filterByStatus(status) {
-  filters['status'] = status;
-  buildDashboard();
-}
-
-
-function applyCardFilter(filterKey) {
-  specialFilter = filterKey;
-  buildDashboard();
-}
-
-function applyLegendFilter(color) {
-  specialFilter = color;
-  buildDashboard();
-}
-function buildDashboard() {
-  const supplierSummary = {};
-  let tableHTML = '', supplierTable = '';
-  const detailOrder = [
-    'category', 'code', 'product_name', 'supplier',
-    'budget_qty', 'purcahsed_qty',
-    'stock_in_hand', 'min_stock_qty', 'max_stock_qty',
-    'moq', 'lead_time', 'schedule', 'status', 'remarks', 'date', 'budget_value', 'purcahsed_value',
-    'stock_in_hand_value'
-  ];
-  const legendCounts = { red: 0, orange: 0, green: 0, blue: 0 };
-  let purchasedValue = 0, budgetValue = 0, stockValue = 0, belowMinMOQ = 0, nilStock = 0, shortValue = 0, unplannedValue = 0, plannedQty = 0, actualQty = 0;
-  const suppliers = new Set(), products = new Set();
-  const fromDate = document.getElementById("fromDate").value;
-  const toDate = document.getElementById("toDate").value;
-  const dateFrom = fromDate ? new Date(fromDate) : null;
-  const dateTo = toDate ? new Date(toDate) : null;
-
-  tableHTML += '<tr>' + detailOrder.map(k => `<th>${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`).join('') + '</tr>';
-
-  const statusCounts = {
-    "PO Pending": 0,
-    "PO Raised": 0,
-    "Vendor Issue": 0,
-    "Payment Issue": 0,
-    "Stock in Transit": 0
+function applyFilters() {
+  const requestData = {
+    category: $("#categoryFilter").val()?.trim() || null,
+    sub_category: $("#subcategoryFilter").val()?.trim() || null,
+    supplier: $("#supplierFilter").val()?.trim() || null,
+    status: $("#statusFilter").val()?.trim() || null,
+    date: $("#filterdate").val() || null,
+    page: currentPage,
+    summaryKey: summaryKey || null,
+    limit: pageSize
   };
 
-  const filteredRows = rawData.filter((row, idx) => {
-    const h = {};
-    for (const key in row) h[normalizeHeader(key)] = row[key];
+  fetch("https://my-spring-app-ck1f.onrender.com/purchase/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestData)
+  })
+    .then(res => res.json())
+    .then(json => {
+      if (json.result && json.purchaseList) {
+        rawData = json.purchaseList;
+        totalPages = json.totalPages || 1;
+        buildDashboard();
+        fetchSummaryCards();
+        // ✅ Format date + time: YYYY-MM-DD HH:mm:ss
+        const formatDateTime = (d) => {
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
 
-    // Filter check: category, sub_category, supplier, status
-    for (let key in filters) {
-      const val = filters[key];
-      if (val && h[key]?.toString().toLowerCase() !== val.toString().toLowerCase()) return false;
-    }
+          let hh = d.getHours();
+          const min = String(d.getMinutes()).padStart(2, '0');
+          const ss = String(d.getSeconds()).padStart(2, '0');
+          const ampm = hh >= 12 ? 'pm' : 'am';
+          hh = hh % 12;
+          hh = hh ? hh : 12; // 0 becomes 12
+          hh = String(hh).padStart(2, '0');
 
-    // Date filter check
-    const rowDate = new Date(h['date']);
-    if (fromDate && (!rowDate || rowDate < dateFrom)) return false;
-    if (toDate && (!rowDate || rowDate > dateTo)) return false;
+          return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss} ${ampm}`;
+        };
 
-    return true;
-  });
+        if (json.latest_purchaseupload_at) {
+          const purchaseDate = new Date(json.latest_purchaseupload_at);
+          document.getElementById('lastPurchaseTime').textContent =
+            '' + formatDateTime(purchaseDate);
+        }
 
-  filteredRows.forEach((row, idx) => {
-    const h = {};
-    for (const key in row) h[normalizeHeader(key)] = row[key];
+        if (json.latest_stockupload_at) {
+          const stockDate = new Date(json.latest_stockupload_at);
+          document.getElementById('lastStockTime').textContent =
+            '' + formatDateTime(stockDate);
+        }
 
-    const status = h['status']?.trim();
-    if (statusCounts[status] !== undefined) statusCounts[status]++;
+      } else {
+        rawData = [];
+        totalPages = 1;
+        buildDashboard();
+        alert("No data found.");
+      }
+    })
+    .catch(err => {
+      console.error("Error:", err);
+      alert("❌ Error fetching data.");
+    });
 
-    const stock = toNumber(h['stockinhand']);
-    const min = toNumber(h['minstockqty']);
-    const max = toNumber(h['maxstockqty']);
-    const moq = toNumber(h['moq']);
-    const purVal = toNumber(h['purchasedvalue'] || h['purcahsedvalue']);
-    const budVal = toNumber(h['budgetvalue']);
-    const budQty = toNumber(h['budgetqty']);
-    const purQty = toNumber(h['purchasedqty'] || h['purcahsedqty']);
-    const rate = budQty ? budVal / budQty : 0;
-    const supplier = h['supplier'] || 'Unknown';
-    const rowClass = stock === 0 ? 'red' : (stock < min ? 'orange' : (stock >= moq && stock <= max ? 'green' : (stock > max ? 'blue' : '')));
+  setupAutoCompleteFilters?.(); // optional
+}
+function buildDashboard() {
+  const formatter = new Intl.NumberFormat('en-IN');
+  const detailOrder = [
+    'category', 'code', 'product_name', 'supplier',
+    'budget_qty', 'purchsed_qty',
+    'stock_in_hand', 'min_stock_qty', 'max_stock_qty',
+    'moq', 'lead_time', 'schedule', 'status', 'remarks', 'date',
+    'budget_value', 'purchsed_value', 'stock_in_hand_value'
+  ];
+
+  let tableHTML = '<thead><tr><th>S.No</th>' + detailOrder.map(k =>
+    `<th>${k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`).join('') + '</tr></thead><tbody>';
+
+  const supplierMap = {};
+
+  rawData.forEach((row, idx) => {
+    // No normalization: use as-is to preserve field names
+    const h = row;
+    const sNo = (currentPage - 1) * pageSize + idx + 1;
     const rowId = h['id'] || `row-${idx}`;
 
-    if (!supplierSummary[supplier]) supplierSummary[supplier] = { red: 0, orange: 0, green: 0, blue: 0, budget: 0, purchase: 0, stock: 0 };
-    supplierSummary[supplier][rowClass]++;
-    supplierSummary[supplier].budget += budVal;
-    supplierSummary[supplier].purchase += purVal;
-    supplierSummary[supplier].stock += Math.round(stock * rate);
+    const supplier = h['supplier']?.trim() || 'Unknown';
 
-    // Special filters
-    if (specialFilter === 'red' && stock !== 0) return;
-    if (specialFilter === 'orange' && !(stock < min)) return;
-    if (specialFilter === 'green' && !(stock >= moq && stock <= max)) return;
-    if (specialFilter === 'blue' && !(stock > max)) return;
-    if (specialFilter === 'unplanned' && !(budQty === 0 && purVal > 0)) return;
-    if (specialFilter === 'shortfall' && !(purQty < budQty)) return;
+    // Safely convert to numbers (even if string or null)
+    const budVal = parseFloat(h['budget_value']) || 0;
+    const purVal = parseFloat(h['purchsed_value']) || 0;
+    const stockVal = parseFloat(h['stock_in_hand_value']) || 0;
 
-    // Summary counts
-    purchasedValue += purVal;
-    budgetValue += budVal;
-    stockValue += Math.round(stock * rate);
-    plannedQty += budQty;
-    actualQty += purQty;
-    if (stock <= 0) legendCounts.red++, nilStock++;
-    else if (stock < min) legendCounts.orange++, belowMinMOQ++;
-    else if (stock >= moq && stock <= max) legendCounts.green++;
-    else if (stock > max) legendCounts.blue++;
-    if (budQty === 0 && purVal > 0) unplannedValue += purVal;
-    if (purQty < budQty) shortValue += Math.round((budQty - purQty) * rate);
-    if (h['supplier']) suppliers.add(h['supplier']);
-    if (h['code']) products.add(h['code']);
+    if (!supplierMap[supplier]) {
+      supplierMap[supplier] = {
+        budget: 0, purchased: 0, stock: 0,
+        red: 0, orange: 0, green: 0, blue: 0
+      };
+    }
 
-    // Row render
-    tableHTML += `<tr class="${rowClass}">` + detailOrder.map(k => {
-      let val = h[normalizeHeader(k)];
+    supplierMap[supplier].budget += budVal;
+    supplierMap[supplier].purchased += purVal;
+    supplierMap[supplier].stock += stockVal;
+
+    // Status color grouping
+    const status = (h['status'] || '').toLowerCase();
+    if (status === 'po pending') supplierMap[supplier].red++;
+    else if (status === 'po raised') supplierMap[supplier].orange++;
+    else if (status === 'vendor issue') supplierMap[supplier].green++;
+    else if (status === 'stock in transit') supplierMap[supplier].blue++;
+
+    // Detail Table
+    tableHTML += `<tr><td>${sNo}</td>` + detailOrder.map(k => {
+      let val = h[k];
       let displayVal = val;
 
       if ([
-        'budgetqty', 'purcahsedqty', 'purchasedqty',
-        'stockinhand', 'minstockqty', 'maxstockqty',
-        'moq', 'leadtime',
-        'budgetvalue', 'purcahsedvalue', 'purchasedvalue',
-        'stockinhandvalue'
-      ].includes(normalizeHeader(k))) {
-        const num = toNumber(val);
+        'budget_qty', 'purchsed_qty', 'stock_in_hand', 'min_stock_qty', 'max_stock_qty',
+        'moq', 'lead_time', 'budget_value', 'purchsed_value', 'stock_in_hand_value'
+      ].includes(k)) {
+        const num = parseFloat(val);
         displayVal = isNaN(num) ? '' : formatter.format(num);
       }
-
 
       if (k === 'status' || k === 'remarks') {
         const safeStatus = (h['status'] || '').replace(/'/g, "\\'");
@@ -475,89 +494,208 @@ function buildDashboard() {
     }).join('') + '</tr>';
   });
 
-  const utilization = budgetValue ? Math.round(purchasedValue / budgetValue * 100) : 0;
-  const planVsActual = plannedQty ? Math.round(actualQty / plannedQty * 100) : 0;
-  const shortPct = budgetValue ? Math.round(shortValue / budgetValue * 100) : 0;
-
-  const skuMinimum = filteredRows.filter(row => {
-    const h = {};
-    for (const key in row) h[normalizeHeader(key)] = row[key];
-    const stock = toNumber(h['stockinhand']);
-    const min = toNumber(h['minstockqty']);
-    return stock <= min;
-  }).length;
-
-  const excessStock = filteredRows.filter(row => {
-    const h = {};
-    for (const key in row) h[normalizeHeader(key)] = row[key];
-    const stock = toNumber(h['stockinhand']);
-    const max = toNumber(h['maxstockqty']);
-    return stock > max;
-  }).length;
-
-  const totalStockInHandValue = filteredRows.reduce((sum, row) => {
-    const h = {};
-    for (const key in row) h[normalizeHeader(key)] = row[key];
-    return sum + toNumber(h['stockinhandvalue']);
-  }, 0);
-
-  const card = (label, value, filterKey = null) =>
-    `<div class="card" onclick="applyCardFilter('${filterKey || ''}')"><h3>${label}</h3><span>${value}</span></div>`;
-
-  const row1 =
-    card("Total Budget", formatINR(budgetValue)) +
-    card("Total Purchased", formatINR(purchasedValue)) +
-    card("Difference", formatINR(budgetValue - purchasedValue)) +
-    card("Utilization", `${utilization}%`) +
-    card("Unplanned Purchase", formatINR(unplannedValue), 'unplanned') +
-    card("Planned Shortfall", formatINR(shortValue), 'shortfall') +
-    card("Planned vs Actual", `${planVsActual}%`);
-
-  const row2 =
-    card("Suppliers", suppliers.size) +
-    card("Products", products.size) +
-    card("Nil Stock", nilStock, 'red') +
-    card("SKU <= Min", skuMinimum) +
-    card("SKU < Min = MOQ", belowMinMOQ, 'orange') +
-    card("Excess Stock", excessStock, 'blue') +
-    card("Stock in Hand Value", formatINR(totalStockInHandValue));
-
-  document.getElementById('summaryCards').innerHTML = `
-    <div class="d-flex flex-wrap gap-3 justify-content-center mb-3">${row1}</div>
-    <div class="d-flex flex-wrap gap-3 justify-content-center">${row2}</div>
-  `;
-
+  tableHTML += '</tbody>';
   document.getElementById('dataTable').innerHTML = tableHTML;
 
-  document.getElementById('legend').innerHTML = `
-    <div class="legend d-flex justify-content-center">
-      <div class="legend-row">
-        <div class="legend-item red" onclick="filterByStatus('PO Pending')">⛔ PO Pending (${statusCounts['PO Pending']})</div>
-        <div class="legend-item green" onclick="filterByStatus('PO Raised')">🟩 PO Raised (${statusCounts['PO Raised']})</div>
-        <div class="legend-item orange" onclick="filterByStatus('Vendor Issue')">🟨 Vendor Issue (${statusCounts['Vendor Issue']})</div>
-        <div class="legend-item red" onclick="filterByStatus('Payment Issue')">🔴 Payment Issue (${statusCounts['Payment Issue']})</div>
-        <div class="legend-item blue" onclick="filterByStatus('Stock in Transit')">🔹 Stock in Transit (${statusCounts['Stock in Transit']})</div>
-      </div>
-    </div>
-  `;
+  // ✅ Pagination Info
+  $("#pageInfo").text(`Page ${currentPage} of ${totalPages}`);
 
-  supplierTable = '<tr><th>Supplier</th><th>Budget Value</th><th>Purchased Value</th><th>Stock Value</th><th>🔴</th><th>🟠</th><th>🟢</th><th>🔵</th></tr>';
-  Object.entries(supplierSummary).forEach(([name, stats]) => {
-    supplierTable += `<tr>
-      <td>${name}</td>
-      <td>${formatINR(stats.budget)}</td>
-      <td>${formatINR(stats.purchase)}</td>
-      <td>${formatINR(stats.stock)}</td>
-      <td>${stats.red}</td>
-      <td>${stats.orange}</td>
-      <td>${stats.green}</td>
-      <td>${stats.blue}</td>
-    </tr>`;
+  // ✅ Build Supplier Summary Table
+  let supplierHTML = '<thead><tr><th>Supplier</th><th>Budget Value</th><th>Purchased Value</th><th>Stock Value</th><th>🔴</th><th>🟠</th><th>🟢</th><th>🔵</th></tr></thead><tbody>';
+
+  Object.entries(supplierMap).forEach(([supplier, data]) => {
+    supplierHTML += `
+      <tr>
+        <td>${supplier}</td>
+        <td>${formatter.format(data.budget)}</td>
+        <td>${formatter.format(data.purchased)}</td>
+        <td>${formatter.format(data.stock)}</td>
+        <td>${data.red}</td>
+        <td>${data.orange}</td>
+        <td>${data.green}</td>
+        <td>${data.blue}</td>
+      </tr>`;
   });
-  document.getElementById('supplierTable').innerHTML = supplierTable;
+
+  supplierHTML += '</tbody>';
+  document.getElementById('supplierTable').innerHTML = supplierHTML;
 }
 
 
+function fetchSummaryCards() {
+  const requestData = {
+    category: $("#categoryFilter").val()?.trim() || null,
+    subcategory: $("#subcategoryFilter").val()?.trim() || null,
+    supplier: $("#supplierFilter").val()?.trim() || null,
+    status: $("#statusFilter").val()?.trim() || null,
+    date: $("#filterdate").val() || null,
+    summaryKey: summaryKey || null
+  };
 
-// Load data on page load
-window.onload = loadDashboard;
+  fetch("https://my-spring-app-ck1f.onrender.com/purchase/summary", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestData)
+  })
+    .then(response => response.json())
+    .then(summary => {
+      const card = (label, value, sub = "", variant = "", filterKey = null) => `
+        <div class="card ${variant}" ${filterKey ? `onclick="filterBySummary('${filterKey}')"` : ""}>
+          <div class="card-title">${label}</div>
+          <div class="card-value">${value}</div>
+          ${sub ? `<div class="card-subtext">${sub}</div>` : ""}
+        </div>
+      `;
+
+      const formatINR = (val) =>
+        new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: "INR",
+          maximumFractionDigits: 0,
+        }).format(val);
+
+      const summaryHTML = [
+        card("Total Budget", formatINR(summary.totalBudget), "", "primary"),
+        card("Total Purchased", formatINR(summary.totalPurchased), "", "info"),
+        card("Difference", formatINR(summary.difference), "", "danger"),
+        card("Utilization", `${summary.utilization}%`, "", "warning"),
+        card("Unplanned Purchase", formatINR(summary.unplanned), "", "danger", "UNPLANNED"),
+        card("Planned Shortfall", formatINR(summary.shortfall), "", "warning", "SHORTFALL"),
+        card("Planned vs Actual", `${summary.planVsActual}%`, "", "success"),
+        card("Suppliers", summary.suppliers, "", "info"),
+        card("Products", summary.products, "", "primary"),
+        card("Nil Stock", summary.nilStock, "", "danger", "NIL"),
+        card("SKU ≤ Min", summary.skuMin, "", "warning"),
+        card("SKU < Min = MOQ", summary.belowMinMOQ, "", "warning"),
+        card("Excess Stock", summary.excessStock, "", "info", "EXCESS"),
+        card("Stock in Hand Value", formatINR(summary.stockValue), "", "success"),
+      ].join("");
+
+      document.getElementById("summaryCards").innerHTML = `<div class="cards">${summaryHTML}</div>`;
+
+      const statusCounts = summary.statusCounts || {};
+      document.getElementById('legend').innerHTML = `
+        <div class="legend d-flex justify-content-center">
+          <div class="legend-row">
+            <div class="legend-item red" onclick="filterByStatus('PO Pending')">⛔ PO Pending (${statusCounts['PO Pending'] || 0})</div>
+            <div class="legend-item green" onclick="filterByStatus('PO Raised')">🟩 PO Raised (${statusCounts['PO Raised'] || 0})</div>
+            <div class="legend-item orange" onclick="filterByStatus('Vendor Issue')">🟨 Vendor Issue (${statusCounts['Vendor Issue'] || 0})</div>
+            <div class="legend-item red" onclick="filterByStatus('Payment Issue')">🔴 Payment Issue (${statusCounts['Payment Issue'] || 0})</div>
+            <div class="legend-item blue" onclick="filterByStatus('Stock in Transit')">🔹 Stock in Transit (${statusCounts['Stock in Transit'] || 0})</div>
+          </div>
+        </div>
+      `;
+    })
+    .catch(error => {
+      console.error("Failed to fetch summary cards", error);
+      alert("❌ Failed to fetch summary cards");
+    });
+}
+
+function filterBySummary(key) {
+  summaryKey = key;
+  fetchSummaryCards();
+  applyFilters();
+}
+
+function filterByStatus(status) {
+  document.querySelectorAll(".status-selectable").forEach(el =>
+    el.classList.remove("active-status")
+  );
+
+  const selected = [...document.querySelectorAll(".status-selectable")]
+    .find(el => el.textContent.includes(status));
+  if (selected) selected.classList.add("active-status");
+
+  const statusFilter = document.getElementById("statusFilter");
+  if (statusFilter) {
+    statusFilter.value = status;
+    applyFilters();
+  }
+}
+function downloadTemplateReport() {
+  const category = document.getElementById("modalCategory")?.value || "";
+  const supplier = document.getElementById("modalSupplier")?.value || "";
+  const status = document.getElementById("modalStatus")?.value || "";
+
+  const queryParams = new URLSearchParams({ category, supplier, status });
+  const url = `https://my-spring-app-ck1f.onrender.com/purchase/download?${queryParams.toString()}`;
+
+  fetch(url)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error("Failed to download Excel.");
+      }
+      const disposition = response.headers.get("Content-Disposition");
+      let filename = "purchase_report.xlsx";
+
+      // Try to extract filename from header if available
+      if (disposition && disposition.includes("filename=")) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match?.[1]) {
+          filename = match[1];
+        }
+      }
+
+      return response.blob().then(blob => ({ blob, filename }));
+    })
+    .then(({ blob, filename }) => {
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url); // Clean up
+    })
+    .catch(error => {
+      console.error("Download error:", error);
+      alert("❌ Failed to download Excel file.");
+    });
+}
+
+function uploadoverall() {
+  const input = document.getElementById('excelInput');
+  if (!input.files || input.files.length === 0) return;
+
+  const file = input.files[0];
+  const formData = new FormData();
+  formData.append("file", file);
+
+  fetch("https://my-spring-app-ck1f.onrender.com/purchase/purcahseuploadfile", {
+    method: "POST",
+    body: formData
+  })
+    .then(response => {
+      if (!response.ok) throw new Error("Upload failed");
+
+      const disposition = response.headers.get("Content-Disposition");
+      let filename = "response.xlsx";
+      if (disposition && disposition.includes("filename=")) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match?.[1]) {
+          filename = match[1];
+        }
+      }
+
+      return response.blob().then(blob => ({ blob, filename }));
+    })
+    .then(({ blob, filename }) => {
+      // Trigger file download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      // Success toast
+      bootstrap.Modal.getInstance(document.getElementById("overallModal")).hide();
+      showToast("✅ Overall uploaded!");
+      applyFilters(); // if needed
+    })
+    .catch(() => showToast("❌ Upload error.", false));
+}

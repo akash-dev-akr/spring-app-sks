@@ -1,12 +1,39 @@
 let currentEditCell = null;
 let currentReasonCell = null;
 
+let currentPage = 1;
+let totalPages = 1;
+let pageSize = 10; // Default limit
+
 $(document).ready(function () {
 
   fetchListingData();
 
-  // Search
+  // Limit selector change
+  $("#limitSelector").on("change", function () {
+    pageSize = parseInt($(this).val());
+    currentPage = 1;
+    fetchListingData();
+  });
+
+  // Pagination controls
+  $("#prevPage").on("click", function () {
+    if (currentPage > 1) {
+      currentPage--;
+      fetchListingData();
+    }
+  });
+
+  $("#nextPage").on("click", function () {
+    if (currentPage < totalPages) {
+      currentPage++;
+      fetchListingData();
+    }
+  });
+
+  // Search button
   $("#searchBtn").on("click", function () {
+    currentPage = 1;
     fetchListingData();
   });
   let currentEditCell = null;
@@ -110,7 +137,7 @@ $(document).ready(function () {
 
     // Send update to backend
     $.ajax({
-      url: "https://spring-app-sks.onrender.com/indentvsdelivery/updatefieldbycode",
+      url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/updatefieldbycode",
       method: "POST",
       contentType: "application/json",
       data: JSON.stringify(payload),
@@ -170,7 +197,7 @@ $(document).ready(function () {
     };
 
     $.ajax({
-      url: "https://spring-app-sks.onrender.com/indentvsdelivery/updatereason",
+      url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/updatereason",
       method: "POST",
       contentType: "application/json",
       data: JSON.stringify(payload),
@@ -191,9 +218,12 @@ $('#resetBtn').on('click', function () {
   $('#filterPackFormat').val('');
   $('#filterSection').val('');
   $('#filterProduct').val('');
-
+ currentPage = 1;
+ totalPages = 1;
+ pageSize = 10; 
   fetchListingData();
 });
+
 function updateTotal() {
   const total = $(".qtyInput").toArray().reduce((sum, el) => {
     return sum + (parseFloat($(el).val()) || 0);
@@ -204,13 +234,15 @@ $('#differenceFilter, #filterPlannedDiff, #filterPackedDiff, #filterDispatchedDi
   .on('change', fetchListingData);
 
 let rawData = [];
-
 function fetchListingData() {
   const requestData = {
     reportDate: $('#filterDate').val(),
     category: $('#filterCategory').val(),
     product: $('#filterProduct').val(),
     section: $('#filterSection').val(),
+    packFormat: $('#filterPackFormat').val(),
+    page: currentPage,
+    limit: pageSize,
     differenceFilter: {
       difference: $('#differenceFilter').val(),
       planned_diff: $('#filterPlannedDiff').val(),
@@ -221,7 +253,7 @@ function fetchListingData() {
   };
 
   $.ajax({
-    url: "https://spring-app-sks.onrender.com/indentvsdelivery/search",
+    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/search",
     method: "POST",
     contentType: "application/json",
     data: JSON.stringify(requestData),
@@ -229,13 +261,13 @@ function fetchListingData() {
       rawData = response.indentdelivery || [];
       const tbody = $("#dataTable tbody").empty();
 
-      rawData.forEach(row => {
+      rawData.forEach((row, index) => {
         const tr = $("<tr>");
+        tr.append(`<td>${(currentPage - 1) * pageSize + index + 1}</td>`); // S.No
         tr.append(`<td>${row.reportDate || ""}</td>`);
         if (rawData.length > 0 && rawData[0].reportDate) {
           $('#filterDate').val(rawData[0].reportDate);
         }
-
         tr.append(`<td>${row.category || ""}</td>`);
         tr.append(`<td>${row.packFormat || ""}</td>`);
         tr.append(`<td>${row.section || ""}</td>`);
@@ -269,38 +301,62 @@ function fetchListingData() {
 
       setupAutocomplete();
 
-      // Render Summary Cards
-      const summary = response.summary || {};
-      const totalProducts = summary.totalProducts || 0;
-      const card = (label, value, footnote = '', variant = '') =>
-        `<div class="card ${variant}">
-      <div class="card-title">${label}</div>
-      <div class="card-value">${formatNumber(value)}</div>
-      ${footnote ? `<div class="card-subtext">${footnote}</div>` : ""}
-  </div>`;
+      // Pagination
+      totalPages = response.totalPages || 1;
+      $("#pageInfo").text(`Page ${currentPage} of ${totalPages}`);
 
-      const summaryHTML =
-        card("Total Products", totalProducts, "", "primary") +
-        card("Total Indent", summary.totalIndent, `${summary.productWithIndent}/${totalProducts}`, "info") +
-        card("Total Available", summary.totalAvailable, `${summary.productWithAvailable}/${totalProducts}`, "success") +
-        card("Total Required", summary.totalRequired, `${summary.productWithRequired}/${totalProducts}`, "danger") +
-        card("Total Planned", summary.totalPlanned, `${summary.productWithPlanned}/${totalProducts}`, "warning") +
-        card("Total Packed", summary.totalPacked, `${summary.productWithPacked}/${totalProducts}`, "primary") +
-        card("Total Dispatched", summary.totalDispatched, `${summary.productWithDispatched}/${totalProducts}`, "info") +
-        card("Total Received", summary.totalReceived, `${summary.productWithReceived}/${totalProducts}`, "success");
-
-      $("#summaryCards").html(`
-  <div class="cards">${summaryHTML}</div>
-`);
-
-
+      // Call summary API separately
+      fetchSummaryCards(rawData[0].reportDate);
     },
     error: function (err) {
       alert("Failed to fetch data");
       console.error(err);
     }
   });
+
+}function fetchSummaryCards(reportDate) {
+  const requestData = {
+    reportdate: reportDate
+  };
+
+  $.ajax({
+    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/summary",
+    method: "POST",
+    contentType: "application/json",
+    data: JSON.stringify(requestData),
+    success: function (response) {
+      const overall = response.summary || {};
+      const page = response.pageSummary || {};
+      const totalProducts = page.totalProducts || 0;
+
+      const card = (label, value, footnote = '', variant = '') => `
+        <div class="card ${variant}">
+          <div class="card-title">${label}</div>
+          <div class="card-value">${formatNumber(value)}</div>
+          ${footnote ? `<div class="card-subtext">${footnote}</div>` : ''}
+        </div>
+      `;
+
+      const summaryHTML = `
+        ${card("Total Products", totalProducts, "", "primary")}
+        ${card("Total Indent", page.totalIndent, `${page.productWithIndent}/${totalProducts}`, "info")}
+        ${card("Total Available", page.totalAvailable, `${page.productWithAvailable}/${totalProducts}`, "success")}
+        ${card("Total Required", page.totalRequired, `${page.productWithRequired}/${totalProducts}`, "danger")}
+        ${card("Total Planned", page.totalPlanned, `${page.productWithPlanned}/${totalProducts}`, "warning")}
+        ${card("Total Packed", page.totalPacked, `${page.productWithPacked}/${totalProducts}`, "primary")}
+        ${card("Total Dispatched", page.totalDispatched, `${page.productWithDispatched}/${totalProducts}`, "info")}
+        ${card("Total Received", page.totalReceived, `${page.productWithReceived}/${totalProducts}`, "success")}
+      `;
+
+      $("#summaryCards").html(`<div class="cards">${summaryHTML}</div>`);
+    },
+    error: function (err) {
+      console.error("Failed to fetch summary", err);
+      $("#summaryCards").html("<div class='text-danger'>Failed to load summary</div>");
+    }
+  });
 }
+
 
 // Format number (no decimal) with commas
 function formatNumber(value) {
@@ -375,7 +431,7 @@ $("#indentUploadForm").on("submit", function (e) {
   formData.append("file", file);
 
   $.ajax({
-    url: "https://spring-app-sks.onrender.com/indentvsdelivery/uploadindentvsdelivery", // Your backend API
+    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/uploadindentvsdelivery", // Your backend API
     method: "POST",
     processData: false,
     contentType: false,
@@ -413,7 +469,7 @@ $("#qtyUploadForm").on("submit", function (e) {
   formData.append("type", quantityType);
 
   $.ajax({
-    url: "https://spring-app-sks.onrender.com/indentvsdelivery/uploadqty",
+    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/uploadqty",
     method: "POST",
     data: formData,
     processData: false,
@@ -472,7 +528,7 @@ function downloadTemplate() {
   }
 
   const formattedType = encodeURIComponent(type);
-  const url = `https://spring-app-sks.onrender.com/indentvsdelivery/qtytemplate?type=${formattedType}`;
+  const url = `https://my-spring-app-ck1f.onrender.com/indentvsdelivery/qtytemplate?type=${formattedType}`;
   window.open(url, "_blank");
 }
 
@@ -495,7 +551,7 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("file", fileInput.files[0]);
 
     try {
-      const response = await fetch("https://spring-app-sks.onrender.com/indentvsdelivery/uploadindentvsdelivery", {
+      const response = await fetch("https://my-spring-app-ck1f.onrender.com/indentvsdelivery/uploadindentvsdelivery", {
         method: "POST",
         body: formData,
       });
@@ -540,7 +596,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // ✅ Template Download
 function downloadOverallTemplate() {
   const a = document.createElement("a");
-  a.href = "https://spring-app-sks.onrender.com/indentvsdelivery/overalltemplate";
+  a.href = "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/overalltemplate";
   a.download = "overall_indent_template.xlsx";
   a.click();
 }

@@ -7,130 +7,300 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Purchase Dashboard</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
-<!-- CSS from /static/styles.css -->
-<link rel="stylesheet" href="styles.css" />
+  <!-- CSS from /static/styles.css -->
+  <link rel="stylesheet" href="styles.css" />
 
 </head>
 
-<body>  <div class="dashboard-container">
-  <header>Purchase Dashboard</header>
+<body>
+  <div class="dashboard-container">
+    <header>Purchase Dashboard</header><div class="upload-bar d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 p-3 bg-light rounded shadow-sm">
 
-  <div class="upload-bar d-flex gap-3 flex-wrap mb-3 uploadpaddingbottom">
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#budgetModal">Upload Purchase</button>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#stockModal">Upload Stock</button>
-  </div>
-  <div class="framofdashbord"></div>
-  <div class="filter-bar mb-3" id="filters"></div>
-  <div class="cards" id="summaryCards"></div>
-  <div class="legend mb-3" id="legend"></div>
-
-  <div class="tabs mb-2">
-    <button class="tab-button active" onclick="switchTab('details')">Detail Table</button>
-    <button class="tab-button" onclick="switchTab('supplier')">Supplier Summary</button>
-  </div>
-
-  <div class="tab-content active" id="details">
-    <div class="scroll-table-wrapper">
-      <table id="dataTable"></table>
+  <!-- Left: Last Updated Info -->
+  <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
+    <div class="text-muted small">
+      <strong>Purchase Upload:</strong> <span id="lastPurchaseTime">2025-08-05 05:52:25 pm</span>
+    </div>
+    <div class="text-muted small">
+      <strong>Stock Upload:</strong> <span id="lastStockTime">2025-08-04 04:40:18 pm</span>
     </div>
   </div>
 
-  <div class="tab-content" id="supplier">
-    <div class="scroll-table-wrapper">
-      <table id="supplierTable"></table>
+  <!-- Right: Buttons and Checkbox -->
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#budgetModal">
+      Upload Purchase File
+    </button>
+
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#stockModal">
+      Upload Stock File
+    </button>
+
+    <div class="form-check ms-2">
+      <input class="form-check-input" type="checkbox" id="showOverallUpload" onchange="toggleOverallUpload()">
+      <label class="form-check-label" for="showOverallUpload">
+        Enable Overall Upload
+      </label>
     </div>
+
+    <button class="btn btn-warning d-none" id="overallUploadBtn" data-bs-toggle="modal" data-bs-target="#overallModal">
+      Upload Overall
+    </button>
   </div>
 
-  <!-- Edit Modal -->
-  <div class="modal fade" id="editModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Update Status, Remark & Date</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="hidden" id="editId" />
-          <div class="mb-3">
-            <label for="editStatus" class="form-label">Status</label>
-            <select class="form-select" id="editStatus">
-              <option value="PO Pending">PO Pending</option>
-              <option value="PO Raised">PO Raised</option>
-              <option value="Vendor Issue">Vendor Issue</option>
-              <option value="Payment Issue">Payment Issue</option>
-              <option value="Stock in Transit">Stock in Transit</option>
-            </select>
+</div>
+
+
+
+    <div class="framofdashbord"></div>
+    <div id="filters" class="filter-bar">
+      <div class="filter-group">
+        <label for="categoryFilter">Category</label>
+        <input id="categoryFilter" class="form-control" placeholder="Category">
+      </div>
+      <div class="filter-group">
+        <label for="subcategoryFilter">Sub Category</label>
+        <input id="subcategoryFilter" class="form-control" placeholder="Subcategory">
+      </div>
+      <div class="filter-group">
+        <label for="supplierFilter">Supplier</label>
+        <input id="supplierFilter" class="form-control supplier-input" placeholder="Supplier">
+      </div>
+
+      <div class="filter-group">
+        <label for="statusFilter">Status</label>
+        <input id="statusFilter" class="form-control" placeholder="Status">
+      </div>
+      <div class="filter-group">
+        <label for="filterdate">Date</label>
+        <input type="date" id="filterdate" />
+      </div>
+      <div class="filter-group filter-buttons">
+        <label style="visibility: hidden;">Action</label>
+        <div class="filter-buttons">
+          <div class="d-flex">
+            <button id="searchBtn" class="btn btn-primary filter-btn">Search</button>
+            <button onclick="resetFilters()" class="btn btn-outline-secondary">Reset</button>
           </div>
-          <div class="mb-3">
-            <label for="editDate" class="form-label">Date</label>
-            <input type="date" class="form-control" id="editDate" />
+        </div>
+
+      </div>
+    </div>
+
+
+    <div class="cards" id="summaryCards"></div>
+    <div class="legend mb-3" id="legend"></div>
+
+    <div class="tabs mb-2">
+      <button class="tab-button active" onclick="switchTab('details')">Detail Table</button>
+      <button class="tab-button" onclick="switchTab('supplier')">Supplier Summary</button>
+    </div>
+    <!-- TABLE SECTION -->
+    <div class="tab-content active" id="details">
+      <div class="scrollable-table-wrapper">
+        <div class="scrollable-table-container">
+          <table id="dataTable" class="table table-bordered table-striped table-hover responsive-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-2 px-2">
+          <div>
+            Show
+            <select id="limitSelector" class="form-select form-select-sm d-inline-block" style="width: auto;">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select> entries
           </div>
-          <div class="mb-3">
-            <label for="editRemark" class="form-label">Remark</label>
-            <textarea class="form-control" id="editRemark" rows="3"></textarea>
+          <div>
+            <button class="btn btn-sm btn-secondary" id="prevPage">Previous</button>
+            <span id="pageInfo" class="mx-2">Page 1</span>
+            <button class="btn btn-sm btn-secondary" id="nextPage">Next</button>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary" onclick="saveEdit()">Save</button>
-        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Upload Purchase Modal -->
-  <div class="modal fade" id="budgetModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Upload Purchased Excel</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
+    <div class="tab-content" id="supplier">
+      <div class="scrollable-table-wrapper">
+        <div class="scrollable-table-container">
+          <table id="supplierTable" class="table table-bordered table-striped table-hover responsive-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
         </div>
-        <div class="modal-body">
-          <input type="file" id="budgetFile" accept=".xlsx,.xls" class="form-control mb-3">
-          <button class="btn btn-outline-success w-100" onclick="downloadTemplate('purchased')">⬇ Download Purchased Template</button>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary" onclick="uploadBudget()">Upload</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- Upload Stock Modal -->
-  <div class="modal fade" id="stockModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Upload Stock Excel</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="file" id="stockFile" accept=".xlsx,.xls" class="form-control mb-3">
-          <button class="btn btn-outline-success w-100" onclick="downloadTemplate('stock')">⬇ Download Stock Template</button>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-primary" onclick="uploadStock()">Upload</button>
-        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Upload Toast -->
-  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
-    <div id="uploadToast" class="toast align-items-center text-white bg-success border-0" role="alert">
-      <div class="d-flex">
-        <div class="toast-body" id="toastMessage">✅ Upload successful!</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+
+
+    <!-- Edit Modal -->
+    <div class="modal fade" id="editModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Update Status, Remark & Date</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="editId" />
+            <div class="mb-3">
+              <label for="editStatus" class="form-label">Status</label>
+              <select class="form-select" id="editStatus">
+                <option value="PO Pending">PO Pending</option>
+                <option value="PO Raised">PO Raised</option>
+                <option value="Vendor Issue">Vendor Issue</option>
+                <option value="Payment Issue">Payment Issue</option>
+                <option value="Stock in Transit">Stock in Transit</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="editDate" class="form-label">Date</label>
+              <input type="date" class="form-control" id="editDate" />
+            </div>
+            <div class="mb-3">
+              <label for="editRemark" class="form-label">Remark</label>
+              <textarea class="form-control" id="editRemark" rows="3"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    
+    
+    
+    <!-- Upload Overall Modal -->
+    <div class="modal fade" id="overallModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">Upload Overall Excel</h5>
+            <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Filter Category</label>
+          <input type="text" id="modalCategory" class="form-control" placeholder="Category">
+
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Filter Supplier</label>
+              <input type="text" id="modalSupplier" placeholder="Supplier" class="form-control" />
+
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Filter Status</label>
+              <select id="modalStatus" class="form-select">
+                <option value="">-- Select Status --</option>
+                <option>PO Pending</option>
+                <option>PO Raised</option>
+                <option>Vendor Issue</option>
+                <option>Payment Issue</option>
+                <option>Stock in Transit</option>
+              </select>
+            </div>
+            <button class="btn btn-outline-info w-100 mb-2" onclick="downloadTemplateReport()">
+              ⬇ Download Overall Template
+            </button>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Choose Excel File</label>
+              <input type="file" id="excelInput" accept=".xlsx,.xls" class="form-control">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button class="btn btn-primary" onclick="uploadoverall()">Upload</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Purchase Modal -->
+    <div class="modal fade" id="budgetModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">Upload Purchased Excel</h5>
+            <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Choose Excel File</label>
+              <input type="file" id="budgetFile" accept=".xlsx,.xls" class="form-control">
+            </div>
+            <button class="btn btn-outline-success w-100" onclick="downloadTemplate('purchased')">
+              ⬇ Download Purchased Template
+            </button>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button class="btn btn-primary" onclick="uploadBudget()">Upload</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Stock Modal -->
+    <div class="modal fade" id="stockModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">Upload Stock Excel</h5>
+            <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Choose Excel File</label>
+              <input type="file" id="stockFile" accept=".xlsx,.xls" class="form-control">
+            </div>
+            <button class="btn btn-outline-success w-100" onclick="downloadTemplate('stock')">
+              ⬇ Download Stock Template
+            </button>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button class="btn btn-primary" onclick="uploadStock()">Upload</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Upload Toast -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
+      <div id="uploadToast" class="toast align-items-center text-white bg-success border-0" role="alert">
+        <div class="d-flex">
+          <div class="toast-body" id="toastMessage">✅ Upload successful!</div>
+          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
       </div>
     </div>
   </div>
- </div>
+  <!-- ✅ Load jQuery first -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+  <!-- jQuery UI -->
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<!-- JS from /static/scripts.js -->
-<script src="purchase.js"></script>
+  <!-- JS from /static/scripts.js -->
+
+  <!-- Bootstrap (optional but used in card styling) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="purchase.js"></script>
+
+
 </body>
-  </div>
+</div>
+
 </html>

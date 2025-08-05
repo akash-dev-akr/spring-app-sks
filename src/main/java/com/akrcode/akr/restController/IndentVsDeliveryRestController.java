@@ -36,16 +36,18 @@ public class IndentVsDeliveryRestController {
 
 	@Autowired
 	IndentVsDeliveryDaoImpl indentVsDeliverydaoimpl;
+	
 	@PostMapping("/uploadindentvsdelivery")
 	public ResponseEntity<byte[]> uploadExcel(@RequestParam("file") MultipartFile file) {
 	    try {
-	        InputStream inputStream = file.getInputStream(); // correct stream extraction
+	        InputStream inputStream = file.getInputStream();
 	        byte[] result = indentVsDeliverydaoimpl.processExcelUploadReturnStatusExcel(inputStream);
 
 	        HttpHeaders headers = new HttpHeaders();
 	        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
 	        headers.setContentDisposition(ContentDisposition.attachment()
 	            .filename("upload_status.xlsx").build());
+	        headers.setCacheControl("no-store"); // Prevent browser resubmit
 
 	        return new ResponseEntity<>(result, headers, HttpStatus.OK);
 	    } catch (Exception e) {
@@ -55,8 +57,6 @@ public class IndentVsDeliveryRestController {
 	    }
 	}
 
-
-
 	@PostMapping("/search")
 	public Map<String, Object> searchIndentVsDelivery(@RequestBody Map<String, Object> filters) {
 	    String dateStr = (String) filters.get("reportDate");
@@ -65,9 +65,13 @@ public class IndentVsDeliveryRestController {
 	    String section = (String) filters.get("section");
 	    String packFormat = (String) filters.get("packFormat");
 
+	    // Extract pagination parameters
+	    int page = filters.get("page") != null ? (int) filters.get("page") : 1;
+	    int limit = filters.get("limit") != null ? (int) filters.get("limit") : 25;
+
+	    // Extract difference filter
 	    Map<String, String> differenceFilter = null;
 	    Object filterObj = filters.get("differenceFilter");
-
 	    if (filterObj instanceof Map<?, ?> map) {
 	        differenceFilter = new HashMap<>();
 	        for (Map.Entry<?, ?> entry : map.entrySet()) {
@@ -77,18 +81,35 @@ public class IndentVsDeliveryRestController {
 	        }
 	    }
 
+	    // Parse date
 	    LocalDate reportDate = null;
 	    if (dateStr != null && !dateStr.isEmpty()) {
 	        try {
 	            reportDate = LocalDate.parse(dateStr);
 	        } catch (DateTimeParseException e) {
-	            e.printStackTrace(); // Optional: log this
+	            e.printStackTrace(); // Or use a logger
 	        }
 	    }
 
+	    // Call service with pagination parameters
 	    return indentVsDeliveryService.listAllProductData(
-	        reportDate, category, product, section, packFormat, differenceFilter
+	        reportDate, category, product, section, packFormat, differenceFilter, page, limit
 	    );
+	}
+	@PostMapping("/summary")
+	public Map<String, Object> fetchSummaryOnly(@RequestBody Map<String, Object> filters) {
+	    String dateStr = (String) filters.get("reportdate");
+
+	    LocalDate reportDate = null;
+	    if (dateStr != null && !dateStr.isBlank()) {
+	        try {
+	            reportDate = LocalDate.parse(dateStr);
+	        } catch (DateTimeParseException e) {
+	            e.printStackTrace(); // Or better, use a logger
+	        }
+	    }
+
+	    return indentVsDeliveryService.fetchSummaryOnly(reportDate);
 	}
 
 

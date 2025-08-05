@@ -26,9 +26,9 @@ public class IndentVsDeliveryServiceImpl implements IndentVsDeliveryService {
 
 	@Override
 	public Map<String, Object> listAllProductData(LocalDate reportDate, String category, String product, String section,
-			String packFormat,Map<String, String>  differenceFilter) {
+			String packFormat,Map<String, String>  differenceFilter, int page, int limit) {
 
-		return indentVsDeliveryDao.listAllProductData(reportDate, category, product, section, packFormat,differenceFilter);
+		return indentVsDeliveryDao.listAllProductData(reportDate, category, product, section, packFormat,differenceFilter,  page,  limit);
 	}
 
 	@Override
@@ -49,6 +49,11 @@ public class IndentVsDeliveryServiceImpl implements IndentVsDeliveryService {
 	@Override
 	public ResponseEntity<ByteArrayResource> overallIndentTemplate() {
 		return indentVsDeliveryDao.overallIndentTemplate();
+	}
+
+	@Override
+	public Map<String, Object> fetchSummaryOnly(LocalDate reportDate) {
+		return indentVsDeliveryDao.fetchSummaryOnly(reportDate);
 	}
 
 }

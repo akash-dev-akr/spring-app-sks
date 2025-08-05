@@ -10,7 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface IndentVsDeliveryService {
 
-	Map<String, Object> listAllProductData(LocalDate reportDate, String category, String product, String section, String packFormat, Map<String, String> differenceFilter);
+	Map<String, Object> listAllProductData(LocalDate reportDate, String category, String product, String section, String packFormat, Map<String, String> differenceFilter, int page, int limit);
 
 	String updateFieldByCode(String code, String field, String value, LocalDate reportDate);
 
@@ -21,6 +21,8 @@ public interface IndentVsDeliveryService {
 	ResponseEntity<ByteArrayResource> downloadQuantityTemplate(String type);
 
 	ResponseEntity<ByteArrayResource> overallIndentTemplate();
+
+	Map<String, Object> fetchSummaryOnly(LocalDate reportDate);
 
 
 	

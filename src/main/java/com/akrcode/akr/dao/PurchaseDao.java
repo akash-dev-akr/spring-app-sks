@@ -1,6 +1,7 @@
 package com.akrcode.akr.dao;
 
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.multipart.MultipartFile;
@@ -24,6 +25,10 @@ public interface PurchaseDao {
 
 	byte[] uploadStocksExcel(InputStream inputStream);
 
-	Map<String, Object> PurchaseUpload(MultipartFile file);
+	List<String> getSuggestions(String type, String query);
+
+	Map<String, Object> getSummary(SearchKeys search);
+
+	byte[] uploadPurcahseExcelFile(MultipartFile file);
 
 }

@@ -56,7 +56,7 @@ header {
 }
 
 .uploadpaddingbottom {
-  padding-bottom: 30px;
+  padding-bottom: 20px;
 }
 
 /* Upload Box Style */
@@ -96,31 +96,55 @@ header {
 
 /* =======================
    FILTER BAR
-======================= */
-.filter-bar {
+======================= */.filter-bar {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
-  margin-bottom: 5px;
+  gap: 16px;
+  margin-bottom: 10px;
 }
 
-.filter-bar input,
-.filter-bar select {
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 305px;
+  font-size: 0.95rem;
+}
+
+.filter-group label {
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: #333;
+}
+
+.filter-group select,
+.filter-group input {
   padding: 0.5rem 0.75rem;
   border: 1px solid #ccc;
   border-radius: 6px;
-  min-width: 180px;
   font-size: 0.95rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.filter-bar input:focus,
-.filter-bar select:focus {
+.filter-group select:focus,
+.filter-group input:focus {
   outline: none;
   border-color: #4a90e2;
   box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
 }
+
+.filter-buttons {
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  min-width: 180px;
+}
+
+.filter-buttons .d-flex {
+  display: flex;
+  gap: 8px;
+}
+
 
 /* =======================
    SUMMARY CARDS
@@ -130,7 +154,7 @@ header {
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
-  margin-bottom: 25px;
+  margin-bottom: 10px;
   justify-content: center;
 }
 
@@ -204,78 +228,80 @@ header {
 .card.info {
   border-top-color: #17a2b8;
 }
-
-
 /* =======================
-   LEGEND ITEMS
-======================= */
+   LEGEND ITEMS - PREMIUM
+========================= */
 .legend {
   display: flex;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 12px;
   margin-bottom: 16px;
 }
 
 .legend-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
-  margin-bottom: 10px;
 }
-
 .legend-item {
-  padding: 0.5rem 1.25rem;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 250px;              /* ✅ Fixed width for uniform size */
+  height: 40px;              /* ✅ Fixed height */
+  padding: 6px 12px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 15px;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
   white-space: nowrap;
   cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  border: 1px solid transparent;
+  box-sizing: border-box;   /* ✅ Ensures padding doesn't increase size */
   text-align: center;
-  color: #000;
-  background-color: #f1f3f5;
-  transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
+
+
+/* Hover effect */
 .legend-item:hover {
   transform: translateY(-2px);
-  background-color: #e0e4e9;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
-/* Legend Colors */
-.legend-item.red,
-.red {
-  background-color: #ffe5e5;
+/* Status colors - subtle & modern */
+.legend-item.red {
+  background: linear-gradient(to right, #ffe5e5, #ffcccc);
   color: #a94442;
+  border-color: #f5bcbc;
 }
 
-.legend-item.orange,
-.orange {
-  background-color: #fff3cd;
-  color: #856404;
-}
-
-.legend-item.green,
-.green {
-  background-color: #d4edda;
+.legend-item.green {
+  background: linear-gradient(to right, #d4edda, #c1e3cd);
   color: #155724;
+  border-color: #b2dfdb;
 }
 
-.legend-item.blue,
-.blue {
-  background-color: #d6eaff;
+.legend-item.orange {
+  background: linear-gradient(to right, #fff3cd, #ffeaa7);
+  color: #856404;
+  border-color: #ffe0b2;
+}
+
+.legend-item.blue {
+  background: linear-gradient(to right, #d6eaff, #b3d4fc);
   color: #0b5394;
+  border-color: #90c4f6;
 }
-
 /* =======================
-   TABS
+   Tabs Style
 ======================= */
 .tabs {
   display: flex;
   justify-content: center;
   gap: 12px;
-  /* padding: 1rem 0; */
   flex-wrap: wrap;
 }
 
@@ -306,79 +332,90 @@ header {
 .tab-content.active {
   display: block;
 }
-
 /* =======================
-   SCROLLABLE TABLE WRAPPER
+   Scrollable Container
 ======================= */
-.scroll-table-wrapper {
+.scrollable-table-container {
+  max-height: 480px;
+  overflow-y: auto;
   overflow-x: auto;
-  max-height: 400px;
-  margin: 1rem 0;
-  background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  background-color: #ffffff;
+  margin-top: 20px;
+}
+/* =======================
+   Scrollable Container
+======================= */
+.scrollable-table-container {
+  max-height: 480px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  background-color: #ffffff;
+  margin-top: 20px;
 }
 
-.table-filter {
-  width: 100%;
-  padding: 4px 6px;
-  font-size: 12px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-thead select:focus {
-  outline: none;
-  border-color: #1565c0;
-  box-shadow: 0 0 5px rgba(21, 101, 192, 0.5);
-}
-
-/* Table Element */
-table {
+/* Responsive table layout */
+table.responsive-table {
+  table-layout: auto; /* let content define width */
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
-  min-width: 1200px;
+  font-family: 'Segoe UI', sans-serif;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* Header and Body Cell Styles */
-th,
-td {
-  padding: 10px 12px;
-  text-align: center;
-  border-bottom: 1px solid #e6e6e6;
-  white-space: nowrap;
-}
-
-/* Table Head Styling */
-th {
-  background-color: #e8f0fe;
-  color: #2c3e50;
-  font-weight: 600;
+/* Sticky header fix */
+#dataTable thead th,
+#supplierTable thead th {
   position: sticky;
   top: 0;
-  z-index: 2;
-  text-align: center;
-}
-
-/* DataTable specific override for dark header */
-#dataTable thead th {
-  background-color: #1e2a8a !important;
-  color: #ffffff !important;
-  text-align: center;
-  vertical-align: middle;
+  z-index: 5;
+  background-color: #4d6edb;
+  color: white;
   font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+  padding: 10px 12px;
+  white-space: nowrap;
+  border-bottom: 2px solid #d1d9ff;
 }
 
-/* DataTable Body Styling */
-#dataTable tbody td {
+/* Data cells */
+#dataTable td,
+#supplierTable td {
   text-align: center;
-  vertical-align: middle;
+  padding: 8px 12px;
   font-size: 14px;
+  border-bottom: 1px solid #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+/* Optional: Widen specific header column */
+th.ingress-col,
+td.ingress-col {
+  min-width: 180px; /* enough to avoid cutting header like 'Ingress Max Weight' */
+}
+
+/* Status Row Coloring */
+tr.red    { background-color: #f8d7da !important; }
+tr.orange { background-color: #fff3cd !important; }
+tr.green  { background-color: #d4edda !important; }
+tr.blue   { background-color: #d1ecf1 !important; }
+
+tr.red:hover,
+tr.orange:hover,
+tr.green:hover,
+tr.blue:hover {
+  background-color: #cce5ff !important;
+}
+
 
 /* =======================
-   MODAL STYLING
+   Modal Styling (Optional)
 ======================= */
 .modal .modal-header {
   background-color: #f8f9fa;
@@ -400,7 +437,10 @@ th {
   border: 1px solid #ccc;
   padding: 0.5rem;
 }
-
+.modal {
+  position: relative;
+  z-index: 1055; /* already set in Bootstrap, but just in case */
+}
 /* =======================
    AUTOCOMPLETE DROPDOWN
 ======================= */
@@ -435,6 +475,7 @@ th {
   font-weight: 500;
 }
 
+
 /* =======================
    RESPONSIVE DESIGN
 ======================= */
@@ -450,10 +491,10 @@ th {
     width: 100%;
     justify-content: space-between;
   }
-
-  .scroll-table-wrapper {
-    overflow-x: scroll;
-  }
+.scroll-table-wrapper {
+  overflow-x: auto;
+  padding: 10px;
+}
 
   table {
     min-width: 1000px;
@@ -472,7 +513,12 @@ th {
     width: 100%;
     max-width: 100%;
   }
+}thead select {
+  margin-top: 4px;
+  font-size: 11px;
+  padding: 2px 4px;
 }
+
 
 /* =======================
    TOAST MESSAGE
@@ -554,40 +600,9 @@ button,
 
 .nav a:hover,
 .nav a.active {
-  background-color: #2c4be6;
+  background-color: #47569c;
 }
 
 /* =======================
    FULLSCREEN IFRAME
 ======================= */
-iframe {
-  width: 100%;
-  height: calc(100% - 60px);
-  border: none;
-}
-
-
-
-.filter-header-container {
-  position: relative;
-  text-align: center;
-  cursor: pointer;
-}
-
-.filter-label {
-  color: white;
-  display: block;
-  font-weight: bold;
-}
-
-.filter-dropdown {
-  display: none;
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 11px;
-  padding: 2px;
-  width: 70px;
-  z-index: 1000;
-}

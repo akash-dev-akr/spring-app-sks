@@ -28,15 +28,15 @@ public class excelRestControler {
 	private PurchaseService purchaseService;
 
 
-	@PostMapping("/upload") 
-	public Map<String, Object> readAndSaveAllSheetsFromPath() {
-		return excelDaoimpl.readAndSaveAllSheetsFromPath();
-	}
-
-	@GetMapping("/{bom_code}")
-	public PdfReportDto getExcelPdfvalues(@PathVariable("bom_code") String bomCode) {
-		return excelDaoimpl.getExcelPdfvalues(bomCode);
-	}
+//	@PostMapping("/upload") 
+//	public Map<String, Object> readAndSaveAllSheetsFromPath() {
+//		return excelDaoimpl.readAndSaveAllSheetsFromPath();
+//	}
+//
+//	@GetMapping("/{bom_code}")
+//	public PdfReportDto getExcelPdfvalues(@PathVariable("bom_code") String bomCode) {
+//		return excelDaoimpl.getExcelPdfvalues(bomCode);
+//	}
 
 //	@PostMapping("/search")
 //	public Map<String, Object> searchFilter() {

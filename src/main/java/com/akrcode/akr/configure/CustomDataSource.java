@@ -1,6 +1,8 @@
 package com.akrcode.akr.configure;
 
 import java.sql.SQLException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -8,11 +10,12 @@ import org.springframework.context.annotation.Configuration;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import jakarta.annotation.PreDestroy;
+
 /**
- * CustomDataSource Class - Dynamic database based on login or condition.
- * Supports switching between local and Render DB using spring.datasource.url as base.
- * 
- * @author akash
+ * CustomDataSource - Reuses Hikari pools per DB and avoids connection overflow.
+ *
+ * Author: Akash
  */
 @Configuration
 public class CustomDataSource {
@@ -26,35 +29,78 @@ public class CustomDataSource {
     @Value("${spring.datasource.password}")
     private String dbPassword;
 
+    // Stores Hikari pools for each DB
+    private final Map<String, HikariDataSource> dataSourceMap = new ConcurrentHashMap<>();
+
+    /**
+     * Gets or creates a HikariDataSource for the specified DB.
+     */
     public HikariDataSource dynamicDatabaseChange(String databaseName) throws SQLException {
-        HikariConfig config = new HikariConfig();
-
-        // Replace the last part (database name) with the provided databaseName
-        String[] parts = baseUrl.split("/");
-        parts[parts.length - 1] = databaseName;
-
-        // Rebuild the URL and preserve any query params like ?sslmode=require
-        String newUrl = String.join("/", parts);
-
-        // If base URL has query params, like ?sslmode=require, append them
-        if (baseUrl.contains("?")) {
-            String queryParams = baseUrl.substring(baseUrl.indexOf("?"));
-            newUrl += queryParams;
+        if (dataSourceMap.containsKey(databaseName)) {
+            HikariDataSource existing = dataSourceMap.get(databaseName);
+            if (existing != null && !existing.isClosed()) {
+                return existing;
+            }
         }
 
-        config.setJdbcUrl(newUrl);
+        // New pool config
+        String jdbcUrl = buildNewJdbcUrl(databaseName);
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(jdbcUrl);
         config.setUsername(dbUsername);
         config.setPassword(dbPassword);
+        config.setMaximumPoolSize(5);
+        config.setPoolName("DynamicPool-" + databaseName);
 
-        return new HikariDataSource(config);
+        HikariDataSource newDataSource = new HikariDataSource(config);
+        dataSourceMap.put(databaseName, newDataSource);
+        return newDataSource;
     }
 
-    public String getDatabaseName() {
-        String[] parts = baseUrl.split("/");
-        String dbNamePart = parts[parts.length - 1];
-        if (dbNamePart.contains("?")) {
-            dbNamePart = dbNamePart.split("\\?")[0]; // remove query params
+    /**
+     * Builds a new JDBC URL by replacing the DB name in baseUrl.
+     */
+    private String buildNewJdbcUrl(String newDbName) {
+        String urlWithoutParams = baseUrl;
+        String queryParams = "";
+
+        if (baseUrl.contains("?")) {
+            urlWithoutParams = baseUrl.substring(0, baseUrl.indexOf("?"));
+            queryParams = baseUrl.substring(baseUrl.indexOf("?"));
         }
-        return dbNamePart;
+
+        String[] parts = urlWithoutParams.split("/");
+        if (parts.length < 1) {
+            throw new IllegalArgumentException("Invalid JDBC URL: " + baseUrl);
+        }
+
+        parts[parts.length - 1] = newDbName; // Replace DB name
+        return String.join("/", parts) + queryParams;
+    }
+
+    /**
+     * Gets the default database name from baseUrl.
+     */
+    public String getDatabaseName() {
+        String urlWithoutParams = baseUrl;
+        if (baseUrl.contains("?")) {
+            urlWithoutParams = baseUrl.substring(0, baseUrl.indexOf("?"));
+        }
+
+        String[] parts = urlWithoutParams.split("/");
+        return parts[parts.length - 1];
+    }
+
+    /**
+     * Gracefully closes all data sources on shutdown.
+     */
+    @PreDestroy
+    public void cleanup() {
+        for (HikariDataSource ds : dataSourceMap.values()) {
+            if (ds != null && !ds.isClosed()) {
+                ds.close();
+            }
+        }
+        dataSourceMap.clear();
     }
 }

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard</title>
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f6f9;
+      color: #333;
+    }
+
+    /* Top Navigation Bar */
+    header.topnav {
+      background-color: #3949ab;
+      color: white;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    /* Logo */
+    .logo {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    /* Menu List */
+    .nav-links {
+      list-style: none;
+      display: flex;
+      gap: 30px;
+      margin: 0;
+      padding: 0;
+    }
+
+    .nav-links li {
+      font-size: 16px;
+      font-weight: 500;
+      padding: 10px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .nav-links li:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .nav-links li.active {
+      background-color: #fff;
+      color: #3949ab;
+      font-weight: 600;
+    }
+
+    /* Main Content */
+    .main-content {
+      height: calc(100vh - 70px);
+      overflow: hidden;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background-color: white;
+    }
+
+    @media (max-width: 768px) {
+      .nav-links {
+        flex-direction: column;
+        position: absolute;
+        top: 70px;
+        right: 0;
+        background-color: #3949ab;
+        width: 200px;
+        display: none;
+        padding: 10px;
+      }
+
+      .nav-links.open {
+        display: flex;
+      }
+
+      .menu-toggle {
+        display: block;
+        cursor: pointer;
+        font-size: 24px;
+      }
+    }
+
+    .menu-toggle {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topnav">
+    <div class="logo">Sri Krishna Sweet</div>
+    <ul class="nav-links">
+       <li data-page="dashboard.html">Dashboard</li>
+      <li data-page="indent.html">Indent</li>
+      <li data-page="purchase.html">Purchase</li>
+    </ul>
+  </header>
+
+  <div class="main-content">
+    <iframe id="contentFrame"></iframe>
+  </div>
+
+  <script>
+    $(document).ready(function () {
+      // Default load
+    let path = window.location.pathname.replace("/", "") // gives "dashboard"
+      let pageFile = path + ".html";
+      $("#contentFrame").attr("src", pageFile);
+      $(".nav-links li").removeClass("active");
+      $(`.nav-links li[data-page="${pageFile}"]`).addClass("active");
+      $(`.nav-links li[data-page="${pageFile}"]`).addClass("active");
+ 
+      // Menu click
+      $(".nav-links li").on("click", function () {
+        let file = $(this).data("page");
+        let page = file.replace(".html", "");
+        window.history.pushState({}, "", "/" + page);
+        $("#contentFrame").attr("src", file);
+        $(".nav-links li").removeClass("active");
+        $(this).addClass("active");
+      });
+
+      // Browser back/forward
+      window.onpopstate = function () {window.location.pathname.replace("/", "") 
+        const newPath = window.location.pathname.replace("/", "") ;
+        $("#contentFrame").attr("src", newPath + ".html");
+        $(".nav-links li").removeClass("active");
+        $(`.nav-links li[data-page="${newPath}.html"]`).addClass("active");
+        
+      };
+    });
+  </script>
+
+</body>
+</html>

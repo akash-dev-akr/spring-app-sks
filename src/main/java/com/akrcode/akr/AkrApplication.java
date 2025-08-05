@@ -7,33 +7,28 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
+/**
+ * Main application class for AKR system.
+ */
 @SpringBootApplication
 public class AkrApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(AkrApplication.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(AkrApplication.class, args);
+	}
 
-    @Configuration
-    static class SecurityConfig {
+	/**
+	 * Spring Security configuration.
+	 */
+	@Configuration
+	static class SecurityConfig {
 
-        // Allows all requests without authentication (for development)
-        @Bean
-        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-            http.csrf().disable()
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
-            return http.build();
-        }
+		@Bean
+		public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+			http.csrf().disable().headers(headers -> headers.frameOptions().sameOrigin() // ✅ Allow same-origin iframe
+			).authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
 
-        /*
-        // Uncomment this for JWT-based secured access
-        @Bean
-        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-            http.csrf().disable()
-                .addFilterAfter(new JWTAuthorizationFilter(), UsernamePasswordAuthenticationFilter.class)
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
-            return http.build();
-        }
-        */
-    }
+			return http.build();
+		}
+	}
 }

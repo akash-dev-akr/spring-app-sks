@@ -1,6 +1,7 @@
 package com.akrcode.akr.serviceImpl;
 
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +14,7 @@ import com.akrcode.akr.dto.SearchKeys;
 import com.akrcode.akr.service.PurchaseService;
 
 @Service
-public class PurchaseServiceImpl  implements  PurchaseService{
+public class PurchaseServiceImpl implements PurchaseService {
 	@Autowired
 	private PurchaseDao purchaseDao;
 
@@ -35,11 +36,14 @@ public class PurchaseServiceImpl  implements  PurchaseService{
 
 	@Override
 	public byte[] getSampleStockTemplate() {
-		return purchaseDao.getSampleStockTemplate( );
-	}	@Override
-	public byte[] getSamplePurcahsedTemplate() {
-		return purchaseDao.getSamplePurcahsedTemplate( );
+		return purchaseDao.getSampleStockTemplate();
 	}
+
+	@Override
+	public byte[] getSamplePurcahsedTemplate() {
+		return purchaseDao.getSamplePurcahsedTemplate();
+	}
+
 	@Override
 	public byte[] uploadPurcahseExcel(InputStream inputStream) {
 		return purchaseDao.uploadPurcahseExcel(inputStream);
@@ -51,8 +55,18 @@ public class PurchaseServiceImpl  implements  PurchaseService{
 	}
 
 	@Override
-	public Map<String, Object> PurchaseUpload(MultipartFile file) {
-		return purchaseDao.PurchaseUpload(file);
+	public List<String> getSuggestions(String type, String query) {
+		return purchaseDao.getSuggestions(type, query);
+	}
+
+	@Override
+	public Map<String, Object> getSummary(SearchKeys search) {
+		return purchaseDao.getSummary(search);
+	}
+
+	@Override
+	public byte[] uploadPurchaseExcelFile(MultipartFile file) {
+		return purchaseDao.uploadPurcahseExcelFile(file);
 	}
 
 }

@@ -15,10 +15,13 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.Arrays;
 
@@ -65,464 +68,451 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 				dispatchedReason, receivedDiff, receivedReason;
 		int rowNum;
 	}
-
 	public byte[] processExcelUploadReturnStatusExcel(InputStream inputStream) {
-		String database = "sri_krishna_db";
-		ByteArrayOutputStream out = new ByteArrayOutputStream();
+	    String database = "sri_krishna_db";
 
-		try (Workbook workbook = new XSSFWorkbook(inputStream);
-				HikariDataSource orgDataSource = customDataSource.dynamicDatabaseChange(database);
-				Connection conn = orgDataSource.getConnection()) {
-			Sheet sheet = workbook.getSheetAt(0);
-			if (sheet.getPhysicalNumberOfRows() < 2) {
-				sheet.createRow(1).createCell(0).setCellValue("Empty file!");
-				workbook.write(out);
-				return out.toByteArray();
-			}
+	    try (
+	        HikariDataSource ds = customDataSource.dynamicDatabaseChange(database);
+	        Connection conn = ds.getConnection();
+	        Workbook workbook = new XSSFWorkbook(inputStream);
+	        ByteArrayOutputStream out = new ByteArrayOutputStream()
+	    ) {
+	        Sheet sheet = workbook.getSheetAt(0);
+	        Row header = sheet.getRow(0);
+	        if (header == null) {
+	            Row msgRow = sheet.createRow(1);
+	            msgRow.createCell(0).setCellValue("Empty file!");
+	            workbook.write(out);
+	            return out.toByteArray();
+	        }
 
-			Row headerRow = sheet.getRow(0);
-			Map<String, Integer> headerMap = new HashMap<>();
-			for (int i = 0; i < headerRow.getLastCellNum(); i++) {
-				String header = headerRow.getCell(i).getStringCellValue().trim().toUpperCase();
-				headerMap.put(header, i);
-			}
+	        String[] expectedHeaders = {
+	            "DATE", "CATEGORY", "PACK FORMAT", "SECTION", "CODE", "PRODUCT",
+	            "INDENT QUANTITY", "AVAILABLE QUANTITY", "REQUIRED QUANTITY", "INDENT DIFF", "REASON",
+	            "PLANNED QUANTITY", "PLANNED DIFF", "PLANNED REASON",
+	            "PACKED QUANTITY", "PACKED DIFF", "PACKED REASON",
+	            "DISPATCHED QUANTITY", "DISPATCHED DIFF", "DISPATCHED REASON",
+	            "RECEIVED QUANTITY", "RECEIVED DIFF", "RECEIVED REASON"
+	        };
 
-			List<String> requiredHeaders = Arrays.asList("DATE", "CATEGORY", "PACK FORMAT", "SECTION", "CODE",
-					"PRODUCT");
-			for (String h : requiredHeaders) {
-				if (!headerMap.containsKey(h)) {
-					sheet.createRow(1).createCell(0).setCellValue("Missing header: " + h);
-					workbook.write(out);
-					return out.toByteArray();
-				}
-			}
+	        Map<String, Integer> headerMap = new HashMap<>();
+	        for (int i = 0; i < header.getLastCellNum(); i++) {
+	            Cell cell = header.getCell(i);
+	            if (cell != null && cell.getCellType() == CellType.STRING) {
+	                headerMap.put(cell.getStringCellValue().trim().toUpperCase(), i);
+	            }
+	        }
 
-			List<DataRow> dataRows = parseExcelData(sheet, headerMap);
-			persistData(dataRows, sheet, headerMap, conn);
+	        for (String expected : expectedHeaders) {
+	            if (!headerMap.containsKey(expected)) {
+	                Row msgRow = sheet.createRow(1);
+	                msgRow.createCell(0).setCellValue("Missing header: " + expected);
+	                workbook.write(out);
+	                return out.toByteArray();
+	            }
+	        }
 
-			workbook.write(out);
-			return out.toByteArray();
+	        PreparedStatement psCheckProduct = conn.prepareStatement("SELECT id FROM indent_vs_delivery WHERE code = ?");
+	        PreparedStatement psInsertProduct = conn.prepareStatement(
+	            "INSERT INTO indent_vs_delivery(category, pack_format, section, code, product) VALUES(?,?,?,?,?) RETURNING id"
+	        );
+	        PreparedStatement psCheckData = conn.prepareStatement(
+	            "SELECT 1 FROM indent_vs_delivery_data WHERE product_id = ? AND report_date = ?"
+	        );
+	        PreparedStatement psInsertData = conn.prepareStatement(
+	            "INSERT INTO indent_vs_delivery_data (product_id, report_date, indent_qty, available_qty, required_qty," +
+	            "planned_qty, packed_qty, dispatched_qty, received_qty, difference, reason, planned_difference, planned_reason," +
+	            "packed_difference, packed_reason, dispatched_difference, dispatched_reason, received_difference, received_reason)" +
+	            " VALUES (?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	        );
+	        PreparedStatement psUpdateData = conn.prepareStatement(
+	            "UPDATE indent_vs_delivery_data SET indent_qty = ?::jsonb, available_qty = ?::jsonb, required_qty = ?::jsonb," +
+	            "planned_qty = ?::jsonb, packed_qty = ?::jsonb, dispatched_qty = ?::jsonb, received_qty = ?::jsonb," +
+	            "difference = ?, reason = ?, planned_difference = ?, planned_reason = ?, packed_difference = ?, packed_reason = ?," +
+	            "dispatched_difference = ?, dispatched_reason = ?, received_difference = ?, received_reason = ?" +
+	            " WHERE product_id = ? AND report_date = ?"
+	        );
 
-		} catch (Exception e) {
-			e.printStackTrace();
-			return null;
-		}
+	        int statusCol = header.getLastCellNum();
+	        header.createCell(statusCol).setCellValue("STATUS");
+
+	        Set<String> processedRows = new HashSet<>();
+
+	        for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+	            Row row = sheet.getRow(i);
+	            if (row == null) continue;
+
+	            String status = "Error";
+
+	            try {
+	                // DATE parsing with fallback
+	                Cell dateCell = row.getCell(headerMap.get("DATE"));
+	                LocalDate reportDate;
+	                if (dateCell == null) throw new IllegalArgumentException("Missing DATE");
+	                if (dateCell.getCellType() == CellType.NUMERIC) {
+	                    reportDate = dateCell.getLocalDateTimeCellValue().toLocalDate();
+	                } else {
+	                    String rawDate = getStringCellValue(row, headerMap.get("DATE"));
+	                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+	                    reportDate = LocalDate.parse(rawDate, formatter);
+	                }
+
+	                String code = getStringCellValue(row, headerMap.get("CODE")).trim();
+	                String uniqueKey = reportDate.toString() + "|" + code;
+	                if (processedRows.contains(uniqueKey)) {
+	                    row.createCell(statusCol).setCellValue("Skipped: Duplicate row");
+	                    continue;
+	                }
+	                processedRows.add(uniqueKey);
+
+	                String category = getStringCellValue(row, headerMap.get("CATEGORY"));
+	                String pack = getStringCellValue(row, headerMap.get("PACK FORMAT"));
+	                String section = getStringCellValue(row, headerMap.get("SECTION"));
+	                String product = getStringCellValue(row, headerMap.get("PRODUCT"));
+
+	                if (code.isEmpty() || product.isEmpty()) {
+	                    throw new IllegalArgumentException("Code or Product is empty");
+	                }
+
+	                int productId;
+	                psCheckProduct.setString(1, code);
+	                try (ResultSet rs = psCheckProduct.executeQuery()) {
+	                    if (rs.next()) {
+	                        productId = rs.getInt(1);
+	                    } else {
+	                        psInsertProduct.setString(1, category);
+	                        psInsertProduct.setString(2, pack);
+	                        psInsertProduct.setString(3, section);
+	                        psInsertProduct.setString(4, code);
+	                        psInsertProduct.setString(5, product);
+	                        try (ResultSet rs2 = psInsertProduct.executeQuery()) {
+	                            if (!rs2.next()) throw new SQLException("Insert product failed");
+	                            productId = rs2.getInt(1);
+	                        }
+	                    }
+	                }
+
+	                psCheckData.setInt(1, productId);
+	                psCheckData.setDate(2, Date.valueOf(reportDate));
+	                boolean exists;
+	                try (ResultSet rs = psCheckData.executeQuery()) {
+	                    exists = rs.next();
+	                }
+
+	                String indentQty = toJsonValue(row, headerMap.get("INDENT QUANTITY"));
+	                String availableQty = toJsonValue(row, headerMap.get("AVAILABLE QUANTITY"));
+	                String requiredQty = toJsonValue(row, headerMap.get("REQUIRED QUANTITY"));
+	                String plannedQty = toJsonValue(row, headerMap.get("PLANNED QUANTITY"));
+	                String packedQty = toJsonValue(row, headerMap.get("PACKED QUANTITY"));
+	                String dispatchedQty = toJsonValue(row, headerMap.get("DISPATCHED QUANTITY"));
+	                String receivedQty = toJsonValue(row, headerMap.get("RECEIVED QUANTITY"));
+
+	                String diff = getStringCellValue(row, headerMap.get("INDENT DIFF"));
+	                String reason = getStringCellValue(row, headerMap.get("REASON"));
+	                String plDiff = getStringCellValue(row, headerMap.get("PLANNED DIFF"));
+	                String plReason = getStringCellValue(row, headerMap.get("PLANNED REASON"));
+	                String pcDiff = getStringCellValue(row, headerMap.get("PACKED DIFF"));
+	                String pcReason = getStringCellValue(row, headerMap.get("PACKED REASON"));
+	                String dcDiff = getStringCellValue(row, headerMap.get("DISPATCHED DIFF"));
+	                String dcReason = getStringCellValue(row, headerMap.get("DISPATCHED REASON"));
+	                String rcDiff = getStringCellValue(row, headerMap.get("RECEIVED DIFF"));
+	                String rcReason = getStringCellValue(row, headerMap.get("RECEIVED REASON"));
+
+	                if (exists) {
+	                    psUpdateData.setString(1, indentQty);
+	                    psUpdateData.setString(2, availableQty);
+	                    psUpdateData.setString(3, requiredQty);
+	                    psUpdateData.setString(4, plannedQty);
+	                    psUpdateData.setString(5, packedQty);
+	                    psUpdateData.setString(6, dispatchedQty);
+	                    psUpdateData.setString(7, receivedQty);
+	                    psUpdateData.setString(8, diff);
+	                    psUpdateData.setString(9, reason);
+	                    psUpdateData.setString(10, plDiff);
+	                    psUpdateData.setString(11, plReason);
+	                    psUpdateData.setString(12, pcDiff);
+	                    psUpdateData.setString(13, pcReason);
+	                    psUpdateData.setString(14, dcDiff);
+	                    psUpdateData.setString(15, dcReason);
+	                    psUpdateData.setString(16, rcDiff);
+	                    psUpdateData.setString(17, rcReason);
+	                    psUpdateData.setInt(18, productId);
+	                    psUpdateData.setDate(19, Date.valueOf(reportDate));
+	                    psUpdateData.executeUpdate();
+	                    status = "Updated";
+	                } else {
+	                    psInsertData.setInt(1, productId);
+	                    psInsertData.setDate(2, Date.valueOf(reportDate));
+	                    psInsertData.setString(3, indentQty);
+	                    psInsertData.setString(4, availableQty);
+	                    psInsertData.setString(5, requiredQty);
+	                    psInsertData.setString(6, plannedQty);
+	                    psInsertData.setString(7, packedQty);
+	                    psInsertData.setString(8, dispatchedQty);
+	                    psInsertData.setString(9, receivedQty);
+	                    psInsertData.setString(10, diff);
+	                    psInsertData.setString(11, reason);
+	                    psInsertData.setString(12, plDiff);
+	                    psInsertData.setString(13, plReason);
+	                    psInsertData.setString(14, pcDiff);
+	                    psInsertData.setString(15, pcReason);
+	                    psInsertData.setString(16, dcDiff);
+	                    psInsertData.setString(17, dcReason);
+	                    psInsertData.setString(18, rcDiff);
+	                    psInsertData.setString(19, rcReason);
+	                    psInsertData.executeUpdate();
+	                    status = "Inserted";
+	                }
+
+	            } catch (Exception e) {
+	                status = "Error: " + e.getMessage();
+	                e.printStackTrace();
+	            }
+
+	            row.createCell(statusCol).setCellValue(status);
+	        }
+
+	        workbook.write(out);
+	        return out.toByteArray();
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return null;
+	    }
 	}
 
-	private void persistData(List<DataRow> rows, Sheet sheet, Map<String, Integer> headerMap, Connection conn)
-			throws SQLException {
-		int resultColIndex = headerMap.size();
 
-		Map<String, Integer> codeToProductId = new HashMap<>();
-		PreparedStatement checkProductStmt = conn.prepareStatement("SELECT id FROM indent_vs_delivery WHERE code = ?");
-		PreparedStatement insertProductStmt = conn.prepareStatement(
-				"INSERT INTO indent_vs_delivery (category, pack_format, section, code, product) VALUES (?, ?, ?, ?, ?) RETURNING id");
-
-		for (DataRow data : rows) {
-			Row row = sheet.getRow(data.rowNum);
-			LocalDate reportDate;
-			try {
-				reportDate = LocalDate.parse(data.dateStr, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
-			} catch (Exception e) {
-				row.createCell(resultColIndex).setCellValue("Invalid Date Format");
-				continue;
-			}
-
-			// 1. Get or Insert product
-			int productId;
-			if (codeToProductId.containsKey(data.code)) {
-				productId = codeToProductId.get(data.code);
-			} else {
-				checkProductStmt.setString(1, data.code);
-				ResultSet rs = checkProductStmt.executeQuery();
-				if (rs.next()) {
-					productId = rs.getInt("id");
-				} else {
-					insertProductStmt.setString(1, data.category);
-					insertProductStmt.setString(2, data.packFormat);
-					insertProductStmt.setString(3, data.section);
-					insertProductStmt.setString(4, data.code);
-					insertProductStmt.setString(5, data.product);
-					ResultSet rsInsert = insertProductStmt.executeQuery();
-					if (!rsInsert.next()) {
-						row.createCell(resultColIndex).setCellValue("Error inserting product");
-						continue;
-					}
-					productId = rsInsert.getInt("id");
-				}
-				codeToProductId.put(data.code, productId);
-			}
-
-			// 2. Check if data exists
-			boolean exists;
-			try (PreparedStatement check = conn.prepareStatement(
-					"SELECT 1 FROM indent_vs_delivery_data WHERE product_id = ? AND report_date = ?")) {
-				check.setInt(1, productId);
-				check.setDate(2, Date.valueOf(reportDate));
-				ResultSet rs = check.executeQuery();
-				exists = rs.next();
-			}
-
-			// 3. Prepare insert or update
-			PreparedStatement ps;
-			String[] jsonFields = { data.indentQty, data.availableQty, data.requiredQty, data.plannedQty,
-					data.packedQty, data.dispatchedQty, data.receivedQty };
-			String[] textFields = { data.indentDiff, data.reason, data.plannedDiff, data.plannedReason, data.packedDiff,
-					data.packedReason, data.dispatchedDiff, data.dispatchedReason, data.receivedDiff,
-					data.receivedReason };
-
-			if (exists) {
-				ps = conn.prepareStatement("UPDATE indent_vs_delivery_data SET "
-						+ "indent_qty = ?::jsonb, available_qty = ?::jsonb, required_qty = ?::jsonb, "
-						+ "planned_qty = ?::jsonb, packed_qty = ?::jsonb, dispatched_qty = ?::jsonb, received_qty = ?::jsonb, "
-						+ "difference = ?, reason = ?, planned_difference = ?, planned_reason = ?, "
-						+ "packed_difference = ?, packed_reason = ?, dispatched_difference = ?, dispatched_reason = ?, "
-						+ "received_difference = ?, received_reason = ? " + "WHERE product_id = ? AND report_date = ?");
-			} else {
-				ps = conn.prepareStatement(
-						"INSERT INTO indent_vs_delivery_data (product_id, report_date, indent_qty, available_qty, required_qty, "
-								+ "planned_qty, packed_qty, dispatched_qty, received_qty, difference, reason, planned_difference, "
-								+ "planned_reason, packed_difference, packed_reason, dispatched_difference, dispatched_reason, "
-								+ "received_difference, received_reason) "
-								+ "VALUES (?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-			}
-
-			int i = 1;
-			if (!exists) {
-				ps.setInt(i++, productId);
-				ps.setDate(i++, Date.valueOf(reportDate));
-			}
-
-			// JSON fields
-			for (String val : jsonFields)
-				ps.setString(i++, val);
-
-			// Text fields
-			for (String val : textFields)
-				ps.setString(i++, val);
-
-			if (exists) {
-				ps.setInt(i++, productId);
-				ps.setDate(i++, Date.valueOf(reportDate));
-			}
-
-			ps.executeUpdate();
-			row.createCell(resultColIndex).setCellValue(exists ? "Updated" : "Inserted");
-		}
+	private String getStringCellValue(Row row, int cellIndex) {
+	    Cell cell = row.getCell(cellIndex);
+	    if (cell == null) return "";
+	    switch (cell.getCellType()) {
+	        case STRING: return cell.getStringCellValue().trim();
+	        case NUMERIC: return String.valueOf((long) cell.getNumericCellValue()); // Safe long cast
+	        case BOOLEAN: return String.valueOf(cell.getBooleanCellValue());
+	        case FORMULA:
+	            try {
+	                return String.valueOf((long) cell.getNumericCellValue());
+	            } catch (Exception e) {
+	                return cell.getStringCellValue();
+	            }
+	        default: return "";
+	    }
 	}
 
-	private List<DataRow> parseExcelData(Sheet sheet, Map<String, Integer> headerMap) {
-		List<DataRow> dataList = new ArrayList<>();
-		Iterator<Row> iterator = sheet.iterator();
-		if (iterator.hasNext())
-			iterator.next(); // skip header
-
-		while (iterator.hasNext()) {
-			Row row = iterator.next();
-			DataRow data = new DataRow();
-			data.rowNum = row.getRowNum();
-			data.category = getCellString(row, headerMap.get("CATEGORY"));
-			data.packFormat = getCellString(row, headerMap.get("PACK FORMAT"));
-			data.section = getCellString(row, headerMap.get("SECTION"));
-			data.code = getCellString(row, headerMap.get("CODE"));
-			data.product = getCellString(row, headerMap.get("PRODUCT"));
-			data.dateStr = getCellString(row, headerMap.get("DATE"));
-
-			data.indentQty = toJsonValue(row, headerMap.get("INDENT QUANTITY"));
-			data.availableQty = toJsonValue(row, headerMap.get("AVAILABLE QUANTITY"));
-			data.requiredQty = toJsonValue(row, headerMap.get("REQUIRED QUANTITY"));
-			data.plannedQty = toJsonValue(row, headerMap.get("PLANNED QUANTITY"));
-			data.packedQty = toJsonValue(row, headerMap.get("PACKED QUANTITY"));
-			data.dispatchedQty = toJsonValue(row, headerMap.get("DISPATCHED QUANTITY"));
-			data.receivedQty = toJsonValue(row, headerMap.get("RECEIVED QUANTITY"));
-
-			data.indentDiff = getCellString(row, headerMap.get("INDENT DIFF"));
-			data.reason = getCellString(row, headerMap.get("REASON"));
-			data.plannedDiff = getCellString(row, headerMap.get("PLANNED DIFF"));
-			data.plannedReason = getCellString(row, headerMap.get("PLANNED REASON"));
-			data.packedDiff = getCellString(row, headerMap.get("PACKED DIFF"));
-			data.packedReason = getCellString(row, headerMap.get("PACKED REASON"));
-			data.dispatchedDiff = getCellString(row, headerMap.get("DISPATCHED DIFF"));
-			data.dispatchedReason = getCellString(row, headerMap.get("DISPATCHED REASON"));
-			data.receivedDiff = getCellString(row, headerMap.get("RECEIVED DIFF"));
-			data.receivedReason = getCellString(row, headerMap.get("RECEIVED REASON"));
-
-			dataList.add(data);
-		}
-
-		return dataList;
-	}
-
-	private String getCellString(Row row, Integer cellIndex) {
-		if (cellIndex == null)
-			return "";
-		Cell cell = row.getCell(cellIndex);
-		if (cell == null)
-			return "";
-
-		switch (cell.getCellType()) {
-		case STRING:
-			return cell.getStringCellValue().trim();
-		case NUMERIC:
-			if (DateUtil.isCellDateFormatted(cell)) {
-				return new SimpleDateFormat("dd-MM-yyyy").format(cell.getDateCellValue());
-			} else {
-				double num = cell.getNumericCellValue();
-				return (num == (long) num) ? String.valueOf((long) num) : String.valueOf(num);
-			}
-		case BOOLEAN:
-			return String.valueOf(cell.getBooleanCellValue());
-		case FORMULA:
-			return cell.getCellFormula();
-		default:
-			return "";
-		}
-	}
-
-	private String toJsonValue(Row row, Integer cellIndex) {
-		if (cellIndex == null)
-			return "{\"data\":0}";
-		Cell cell = row.getCell(cellIndex);
-		if (cell == null || cell.getCellType() == CellType.BLANK)
-			return "{\"data\":0}";
-
-		double value = 0;
-		if (cell.getCellType() == CellType.NUMERIC) {
-			value = cell.getNumericCellValue();
-		} else if (cell.getCellType() == CellType.STRING) {
-			try {
-				value = Double.parseDouble(cell.getStringCellValue().trim());
-			} catch (NumberFormatException ignored) {
-			}
-		}
-		return "{\"data\":" + value + "}";
+	private String toJsonValue(Row row, int colIndex) {
+	    String value = getStringCellValue(row, colIndex).replaceAll("[^0-9.]", "");
+	    if (value.isEmpty()) value = "0";
+	    try {
+	        double val = Double.parseDouble(value);
+	        return "{\"data\": " + val + "}";
+	    } catch (NumberFormatException e) {
+	        return "{\"data\": 0}";
+	    }
 	}
 
 	@Override
 	public Map<String, Object> listAllProductData(LocalDate reportDate, String category, String product, String section,
-			String packFormat, Map<String, String> differenceFilter) {
-
+			String packFormat, Map<String, String> differenceFilter, int page, int limit) {
 		Map<String, Object> response = new HashMap<>();
 		List<IndentDeliveryDataDto> productList = new ArrayList<>();
 
-		double totalIndent = 0;
-		double totalAvailable = 0;
-		double totalRequired = 0;
-		double totalPlanned = 0;
-		double totalPacked = 0;
-		double totalDispatched = 0;
-		double totalReceived = 0;
-
-		int productWithIndentCount = 0;
-		int productWithAvailableCount = 0;
-		int productWithRequiredCount = 0;
-		int productWithPlannedCount = 0;
-		int productWithPackedCount = 0;
-		int productWithDispatchedCount = 0;
-		int productWithReceivedCount = 0;
-
-		String database = "sri_krishna_db";
+		String database = "sri_krishna_db"; // Make dynamic if needed
 		HikariDataSource newDataSource = null;
-		Connection conn = null;
-		PreparedStatement stmt = null;
-		ResultSet rs = null;
 
-		try {
-			newDataSource = customDataSource.dynamicDatabaseChange(database);
-			conn = newDataSource.getConnection();
+		try (Connection conn = (newDataSource = customDataSource.dynamicDatabaseChange(database)).getConnection()) {
+			if (reportDate == null) {
+				reportDate = getLatestReportDate(conn);
+				if (reportDate == null) {
+					response.put("result", false);
+					response.put("message", "❌ No report data available.");
+					return response;
+				}
+			}
 
-			StringBuilder sql = new StringBuilder("SELECT p.id, p.report_date, "
-					+ "m.category, m.pack_format, m.section, m.code, m.product, "
-					+ "p.indent_qty, p.available_qty, p.required_qty, "
-					+ "p.planned_qty, p.packed_qty, p.dispatched_qty, p.received_qty, " + "p.reason, p.difference, "
-					+ "p.planned_difference, p.planned_reason, " + "p.packed_difference, p.packed_reason, "
-					+ "p.dispatched_difference, p.dispatched_reason, " + "p.received_difference, p.received_reason "
-					+ "FROM indent_vs_delivery_data p " + "JOIN indent_vs_delivery m ON p.product_id = m.id");
+			String baseSelect = """
+					        SELECT p.id, p.report_date,
+					               m.category, m.pack_format, m.section, m.code, m.product,
+					               p.indent_qty, p.available_qty, p.required_qty,
+					               p.planned_qty, p.packed_qty, p.dispatched_qty, p.received_qty,
+					               p.reason, p.difference, p.planned_difference, p.planned_reason,
+					               p.packed_difference, p.packed_reason,
+					               p.dispatched_difference, p.dispatched_reason,
+					               p.received_difference, p.received_reason
+					          FROM indent_vs_delivery_data p
+					          JOIN indent_vs_delivery m ON p.product_id = m.id
+					""";
+
+			String baseCount = """
+					        SELECT COUNT(*)
+					          FROM indent_vs_delivery_data p
+					          JOIN indent_vs_delivery m ON p.product_id = m.id
+					""";
 
 			List<Object> params = new ArrayList<>();
-			boolean hasWhere = false;
+			StringBuilder whereClause = new StringBuilder();
 			Map<String, String> allowedFields = Map.of("difference", "p.difference", "planned_diff",
 					"p.planned_difference", "packed_diff", "p.packed_difference", "dispatched_diff",
 					"p.dispatched_difference", "received_diff", "p.received_difference");
 
+			// Filters: Difference
 			if (differenceFilter != null) {
 				for (Map.Entry<String, String> entry : differenceFilter.entrySet()) {
-					String key = entry.getKey();
+					String column = allowedFields.get(entry.getKey());
 					String filter = entry.getValue();
-					String column = allowedFields.get(key);
-
 					if (column == null || filter == null || filter.isBlank())
 						continue;
-
-					sql.append(hasWhere ? " AND " : " WHERE ");
+					whereClause.append(whereClause.length() == 0 ? " WHERE " : " AND ");
 					switch (filter) {
-					case "zero":
-						sql.append("(").append(column).append(" IS NULL OR ").append(column).append(" = '0') ");
-						break;
-					case "negative":
-						sql.append("CAST(NULLIF(").append(column).append(", '') AS NUMERIC) < 0 ");
-						break;
-					case "positive":
-						sql.append("CAST(NULLIF(").append(column).append(", '') AS NUMERIC) > 0 ");
-						break;
+					case "zero" ->
+						whereClause.append("(").append(column).append(" IS NULL OR ").append(column).append(" = '0')");
+					case "negative" ->
+						whereClause.append("CAST(NULLIF(").append(column).append(", '') AS NUMERIC) < 0");
+					case "positive" ->
+						whereClause.append("CAST(NULLIF(").append(column).append(", '') AS NUMERIC) > 0");
 					}
-					hasWhere = true;
 				}
 			}
 
+			// Filters: Date and others
 			if (reportDate != null) {
-				sql.append(hasWhere ? " AND" : " WHERE").append(" p.report_date = ? ");
+				whereClause.append(whereClause.length() == 0 ? " WHERE " : " AND ").append("p.report_date = ?");
 				params.add(reportDate);
-				hasWhere = true;
 			}
-
 			if (category != null && !category.isBlank()) {
-				sql.append(hasWhere ? " AND" : " WHERE").append(" LOWER(m.category) = LOWER(?) ");
+				whereClause.append(" AND LOWER(m.category) = LOWER(?)");
 				params.add(category.trim());
-				hasWhere = true;
 			}
-
 			if (product != null && !product.isBlank()) {
-				sql.append(hasWhere ? " AND" : " WHERE").append(" LOWER(m.product) = LOWER(?) ");
+				whereClause.append(" AND LOWER(m.product) = LOWER(?)");
 				params.add(product.trim());
-				hasWhere = true;
 			}
-
 			if (section != null && !section.isBlank()) {
-				sql.append(hasWhere ? " AND" : " WHERE").append(" LOWER(m.section) = LOWER(?) ");
+				whereClause.append(" AND LOWER(m.section) = LOWER(?)");
 				params.add(section.trim());
-				hasWhere = true;
 			}
-
 			if (packFormat != null && !packFormat.isBlank()) {
-				sql.append(hasWhere ? " AND" : " WHERE").append(" LOWER(m.pack_format) = LOWER(?) ");
+				whereClause.append(" AND LOWER(m.pack_format) = LOWER(?)");
 				params.add(packFormat.trim());
-				hasWhere = true;
 			}
 
-			sql.append(" ORDER BY p.report_date DESC, LOWER(m.product) ASC");
+			// Pagination queries
+			String finalSql = baseSelect + whereClause
+					+ " ORDER BY p.report_date DESC, LOWER(m.product) ASC LIMIT ? OFFSET ?";
+			String countSql = baseCount + whereClause;
+			params.add(limit);
+			params.add((page - 1) * limit);
 
-			stmt = conn.prepareStatement(sql.toString());
-			for (int i = 0; i < params.size(); i++) {
-				stmt.setObject(i + 1, params.get(i));
+			// Count total
+			int totalItems = 0;
+			try (PreparedStatement countStmt = conn.prepareStatement(countSql)) {
+				for (int i = 0; i < params.size() - 2; i++) {
+					countStmt.setObject(i + 1, params.get(i));
+				}
+				try (ResultSet rs = countStmt.executeQuery()) {
+					if (rs.next())
+						totalItems = rs.getInt(1);
+				}
 			}
 
-			rs = stmt.executeQuery();
-
-			while (rs.next()) {
-				IndentDeliveryDataDto model = new IndentDeliveryDataDto();
-				model.setId(rs.getInt("id"));
-				model.setReportDate(rs.getDate("report_date").toLocalDate());
-				model.setCategory(rs.getString("category"));
-				model.setPackFormat(rs.getString("pack_format"));
-				model.setSection(rs.getString("section"));
-				model.setCode(rs.getString("code"));
-				model.setProduct(rs.getString("product"));
-
-				// Process quantities only once per row
-				String indentQty = rs.getString("indent_qty");
-				String availableQty = rs.getString("available_qty");
-				String requiredQty = rs.getString("required_qty");
-				String plannedQty = rs.getString("planned_qty");
-				String packedQty = rs.getString("packed_qty");
-				String dispatchedQty = rs.getString("dispatched_qty");
-				String receivedQty = rs.getString("received_qty");
-
-				model.setIndentQtyJson(indentQty);
-				model.setAvailableQtyJson(availableQty);
-				model.setRequiredQtyJson(requiredQty);
-				model.setPlannedQtyJson(plannedQty);
-				model.setPackedQtyJson(packedQty);
-				model.setDispatchedQtyJson(dispatchedQty);
-				model.setReceivedQtyJson(receivedQty);
-
-				model.setReason(rs.getString("reason"));
-				model.setDifference(rs.getString("difference"));
-				model.setPlannedDifference(rs.getString("planned_difference"));
-				model.setPlannedReason(rs.getString("planned_reason"));
-				model.setPackedDifference(rs.getString("packed_difference"));
-				model.setPackedReason(rs.getString("packed_reason"));
-				model.setDispatchedDifference(rs.getString("dispatched_difference"));
-				model.setDispatchedReason(rs.getString("dispatched_reason"));
-				model.setReceivedDifference(rs.getString("received_difference"));
-				model.setReceivedReason(rs.getString("received_reason"));
-
-				// Sum values only once
-				double indentSum = sumJsonArray(indentQty);
-				double availableSum = sumJsonArray(availableQty);
-				double requiredSum = sumJsonArray(requiredQty);
-				double plannedSum = sumJsonArray(plannedQty);
-				double packedSum = sumJsonArray(packedQty);
-				double dispatchedSum = sumJsonArray(dispatchedQty);
-				double receivedSum = sumJsonArray(receivedQty);
-
-				totalIndent += indentSum;
-				totalAvailable += availableSum;
-				totalRequired += requiredSum;
-				totalPlanned += plannedSum;
-				totalPacked += packedSum;
-				totalDispatched += dispatchedSum;
-				totalReceived += receivedSum;
-
-				if (indentSum > 0)
-					productWithIndentCount++;
-				if (availableSum > 0)
-					productWithAvailableCount++;
-				if (requiredSum > 0)
-					productWithRequiredCount++;
-				if (plannedSum > 0)
-					productWithPlannedCount++;
-				if (packedSum > 0)
-					productWithPackedCount++;
-				if (dispatchedSum > 0)
-					productWithDispatchedCount++;
-				if (receivedSum > 0)
-					productWithReceivedCount++;
-
-				productList.add(model);
+			try (PreparedStatement stmt = conn.prepareStatement(finalSql)) {
+				for (int i = 0; i < params.size(); i++) {
+					stmt.setObject(i + 1, params.get(i));
+				}
+				try (ResultSet rs = stmt.executeQuery()) {
+					while (rs.next()) {
+						IndentDeliveryDataDto model = new IndentDeliveryDataDto();
+						model.setId(rs.getInt("id"));
+						model.setReportDate(rs.getDate("report_date").toLocalDate());
+						model.setCategory(rs.getString("category"));
+						model.setPackFormat(rs.getString("pack_format"));
+						model.setSection(rs.getString("section"));
+						model.setCode(rs.getString("code"));
+						model.setProduct(rs.getString("product"));
+						model.setIndentQtyJson(rs.getString("indent_qty"));
+						model.setAvailableQtyJson(rs.getString("available_qty"));
+						model.setRequiredQtyJson(rs.getString("required_qty"));
+						model.setPlannedQtyJson(rs.getString("planned_qty"));
+						model.setPackedQtyJson(rs.getString("packed_qty"));
+						model.setDispatchedQtyJson(rs.getString("dispatched_qty"));
+						model.setReceivedQtyJson(rs.getString("received_qty"));
+						model.setReason(rs.getString("reason"));
+						model.setDifference(rs.getString("difference"));
+						model.setPlannedDifference(rs.getString("planned_difference"));
+						model.setPlannedReason(rs.getString("planned_reason"));
+						model.setPackedDifference(rs.getString("packed_difference"));
+						model.setPackedReason(rs.getString("packed_reason"));
+						model.setDispatchedDifference(rs.getString("dispatched_difference"));
+						model.setDispatchedReason(rs.getString("dispatched_reason"));
+						model.setReceivedDifference(rs.getString("received_difference"));
+						model.setReceivedReason(rs.getString("received_reason"));
+						productList.add(model);
+					}
+				}
 			}
 
-			Map<String, Double> summary = new HashMap<>();
-			summary.put("totalIndent", formatNumberRounded(totalIndent));
-			summary.put("totalAvailable", formatNumberRounded(totalAvailable));
-			summary.put("totalRequired", formatNumberRounded(totalRequired));
-			summary.put("totalPlanned", formatNumberRounded(totalPlanned));
-			summary.put("totalPacked", formatNumberRounded(totalPacked));
-			summary.put("totalDispatched", formatNumberRounded(totalDispatched));
-			summary.put("totalReceived", formatNumberRounded(totalReceived));
-
-			summary.put("productWithIndent", (double) productWithIndentCount);
-			summary.put("productWithAvailable", (double) productWithAvailableCount);
-			summary.put("productWithRequired", (double) productWithRequiredCount);
-			summary.put("productWithPlanned", (double) productWithPlannedCount);
-			summary.put("productWithPacked", (double) productWithPackedCount);
-			summary.put("productWithDispatched", (double) productWithDispatchedCount);
-			summary.put("productWithReceived", (double) productWithReceivedCount);
-			summary.put("totalProducts", (double) productList.size());
-
-			response.put("summary", summary);
-			response.put("result", true);
+			Map<String, List<String>> suggestionMap = getAutoSuggestionValues(conn, reportDate);
+			response.put("autoSuggestions", suggestionMap);
 			response.put("indentdelivery", productList);
+			response.put("totalItems", totalItems);
+			response.put("currentPage", page);
+			response.put("totalPages", (int) Math.ceil((double) totalItems / limit));
+			response.put("result", true);
 
 		} catch (Exception e) {
 			e.printStackTrace();
 			response.put("result", false);
 			response.put("message", "❌ Error fetching report list: " + e.getMessage());
 		} finally {
-			try {
-				if (rs != null)
-					rs.close();
-				if (stmt != null)
-					stmt.close();
-				if (conn != null)
-					conn.close();
-				if (newDataSource != null)
-					newDataSource.close();
-			} catch (Exception ignored) {
-			}
+			if (newDataSource != null)
+				newDataSource.close();
 		}
 
 		return response;
+	}
+
+	private LocalDate getLatestReportDate(Connection conn) throws SQLException {
+		String sql = "SELECT MAX(report_date) FROM indent_vs_delivery_data";
+		try (PreparedStatement stmt = conn.prepareStatement(sql); ResultSet rs = stmt.executeQuery()) {
+			if (rs.next()) {
+				Date date = rs.getDate(1);
+				return date != null ? date.toLocalDate() : null;
+			}
+		}
+		return null;
+	}
+
+	private Map<String, List<String>> getAutoSuggestionValues(Connection conn, LocalDate reportDate)
+			throws SQLException {
+		Map<String, List<String>> suggestions = new HashMap<>();
+		String sql = """
+				    SELECT DISTINCT m.category, m.product, m.section, m.pack_format
+				      FROM indent_vs_delivery_data p
+				      JOIN indent_vs_delivery m ON p.product_id = m.id
+				     WHERE p.report_date = ?
+				""";
+
+		try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+			stmt.setObject(1, reportDate);
+			try (ResultSet rs = stmt.executeQuery()) {
+				Set<String> categories = new TreeSet<>();
+				Set<String> products = new TreeSet<>();
+				Set<String> sections = new TreeSet<>();
+				Set<String> packFormats = new TreeSet<>();
+
+				while (rs.next()) {
+					categories.add(rs.getString("category"));
+					products.add(rs.getString("product"));
+					sections.add(rs.getString("section"));
+					packFormats.add(rs.getString("pack_format"));
+				}
+
+				suggestions.put("category", new ArrayList<>(categories));
+				suggestions.put("product", new ArrayList<>(products));
+				suggestions.put("section", new ArrayList<>(sections));
+				suggestions.put("packFormat", new ArrayList<>(packFormats));
+			}
+		}
+		return suggestions;
 	}
 
 	private double sumJsonArray(String json) {
@@ -854,44 +844,43 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 				// === Compute Differences ===
 				// === Compute and Store Differences as TEXT ===
 				try (PreparedStatement fetchStmt = conn.prepareStatement(
-				        "SELECT indent_qty, available_qty, required_qty, planned_qty, packed_qty, dispatched_qty, received_qty " +
-				        "FROM indent_vs_delivery_data WHERE product_id = ? AND report_date = ?")) {
+						"SELECT indent_qty, available_qty, required_qty, planned_qty, packed_qty, dispatched_qty, received_qty "
+								+ "FROM indent_vs_delivery_data WHERE product_id = ? AND report_date = ?")) {
 
-				    fetchStmt.setInt(1, productId);
-				    fetchStmt.setDate(2, Date.valueOf(reportDate));
-				    ResultSet rs = fetchStmt.executeQuery();
+					fetchStmt.setInt(1, productId);
+					fetchStmt.setDate(2, Date.valueOf(reportDate));
+					ResultSet rs = fetchStmt.executeQuery();
 
-				    if (rs.next()) {
-				        BigDecimal indent = getQtyFromJson(rs.getString("indent_qty"));
-				        BigDecimal available = getQtyFromJson(rs.getString("available_qty"));
-				        BigDecimal required = getQtyFromJson(rs.getString("required_qty"));
-				        BigDecimal planned = getQtyFromJson(rs.getString("planned_qty"));
-				        BigDecimal packed = getQtyFromJson(rs.getString("packed_qty"));
-				        BigDecimal dispatched = getQtyFromJson(rs.getString("dispatched_qty"));
-				        BigDecimal received = getQtyFromJson(rs.getString("received_qty"));
+					if (rs.next()) {
+						BigDecimal indent = getQtyFromJson(rs.getString("indent_qty"));
+						BigDecimal available = getQtyFromJson(rs.getString("available_qty"));
+						BigDecimal required = getQtyFromJson(rs.getString("required_qty"));
+						BigDecimal planned = getQtyFromJson(rs.getString("planned_qty"));
+						BigDecimal packed = getQtyFromJson(rs.getString("packed_qty"));
+						BigDecimal dispatched = getQtyFromJson(rs.getString("dispatched_qty"));
+						BigDecimal received = getQtyFromJson(rs.getString("received_qty"));
 
-				        BigDecimal indentDiff = required.add(available).subtract(indent);
-				        BigDecimal plannedDiff = planned.subtract(indent);
-				        BigDecimal packedDiff = packed.subtract(planned);
-				        BigDecimal dispatchedDiff = dispatched.subtract(packed);
-				        BigDecimal receivedDiff = received.subtract(dispatched);
+						BigDecimal indentDiff = required.add(available).subtract(indent);
+						BigDecimal plannedDiff = planned.subtract(indent);
+						BigDecimal packedDiff = packed.subtract(planned);
+						BigDecimal dispatchedDiff = dispatched.subtract(packed);
+						BigDecimal receivedDiff = received.subtract(dispatched);
 
-				        // Save as text
-				        try (PreparedStatement updateDiff = conn.prepareStatement(
-				                "UPDATE indent_vs_delivery_data SET " +
-				                        "difference = ?, planned_difference = ?, packed_difference = ?, dispatched_difference = ?, received_difference = ? " +
-				                        "WHERE product_id = ? AND report_date = ?")) {
+						// Save as text
+						try (PreparedStatement updateDiff = conn.prepareStatement("UPDATE indent_vs_delivery_data SET "
+								+ "difference = ?, planned_difference = ?, packed_difference = ?, dispatched_difference = ?, received_difference = ? "
+								+ "WHERE product_id = ? AND report_date = ?")) {
 
-				            updateDiff.setString(1, indentDiff.toPlainString());
-				            updateDiff.setString(2, plannedDiff.toPlainString());
-				            updateDiff.setString(3, packedDiff.toPlainString());
-				            updateDiff.setString(4, dispatchedDiff.toPlainString());
-				            updateDiff.setString(5, receivedDiff.toPlainString());
-				            updateDiff.setInt(6, productId);
-				            updateDiff.setDate(7, Date.valueOf(reportDate));
-				            updateDiff.executeUpdate();
-				        }
-				    }
+							updateDiff.setString(1, indentDiff.toPlainString());
+							updateDiff.setString(2, plannedDiff.toPlainString());
+							updateDiff.setString(3, packedDiff.toPlainString());
+							updateDiff.setString(4, dispatchedDiff.toPlainString());
+							updateDiff.setString(5, receivedDiff.toPlainString());
+							updateDiff.setInt(6, productId);
+							updateDiff.setDate(7, Date.valueOf(reportDate));
+							updateDiff.executeUpdate();
+						}
+					}
 				}
 
 				row.createCell(headerRow.getLastCellNum() - 1).setCellValue(status);
@@ -907,17 +896,18 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 	}
 
 	private BigDecimal getQtyFromJson(String json) {
-	    if (json == null || json.isEmpty()) return BigDecimal.ZERO;
-	    try {
-	        json = json.trim();
-	        if (json.startsWith("{") && json.contains("[") && json.contains("]")) {
-	            String insideArray = json.substring(json.indexOf("[") + 1, json.indexOf("]")).trim();
-	            return new BigDecimal(insideArray.isEmpty() ? "0" : insideArray);
-	        }
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	    }
-	    return BigDecimal.ZERO;
+		if (json == null || json.isEmpty())
+			return BigDecimal.ZERO;
+		try {
+			json = json.trim();
+			if (json.startsWith("{") && json.contains("[") && json.contains("]")) {
+				String insideArray = json.substring(json.indexOf("[") + 1, json.indexOf("]")).trim();
+				return new BigDecimal(insideArray.isEmpty() ? "0" : insideArray);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return BigDecimal.ZERO;
 	}
 
 	private static final Map<String, String> QUANTITY_FIELD_MAP = Map.of("INDENT QUANTITY", "indent_qty",
@@ -927,10 +917,15 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 
 	@Override
 	public ResponseEntity<ByteArrayResource> downloadQuantityTemplate(String type) {
+		// Validate input
+		if (type == null || type.trim().isEmpty()) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Type parameter is required");
+		}
+
 		try (Workbook workbook = new XSSFWorkbook()) {
 			Sheet sheet = workbook.createSheet("Quantity Template");
 
-			// ===== Header Style =====
+			// Create Header Style
 			CellStyle headerStyle = workbook.createCellStyle();
 			Font headerFont = workbook.createFont();
 			headerFont.setBold(true);
@@ -940,9 +935,8 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 			headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 			headerStyle.setAlignment(HorizontalAlignment.CENTER);
 
-			// ===== Create Header Row =====
+			// Create Header Row
 			Row header = sheet.createRow(0);
-
 			String[] headers = { "Date", "Code", "Product", type.toUpperCase() };
 
 			for (int i = 0; i < headers.length; i++) {
@@ -952,16 +946,22 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 				sheet.autoSizeColumn(i);
 			}
 
-			// ===== Return Response =====
+			// Generate file in memory
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			workbook.write(out);
+			byte[] fileBytes = out.toByteArray();
+
+			// Build response
+			String fileName = type.toLowerCase().replaceAll("\\s+", "_") + "_template.xlsx";
 
 			return ResponseEntity.ok()
-					.header(HttpHeaders.CONTENT_DISPOSITION,
-							"attachment; filename=" + type.toLowerCase().replace(" ", "_") + "_template.xlsx")
-					.contentType(MediaType.APPLICATION_OCTET_STREAM).body(new ByteArrayResource(out.toByteArray()));
+					.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+					.contentType(MediaType
+							.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+					.contentLength(fileBytes.length).body(new ByteArrayResource(fileBytes));
 
 		} catch (IOException e) {
+			e.printStackTrace(); // This will show up in Render logs
 			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to generate template", e);
 		}
 	}
@@ -989,7 +989,6 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 					"Dispatched Quantity", "Dispatched DIFF", "Dispatched Reason", "Received Quantity", "Received DIFF",
 					"Received Reason" };
 
-			// Map for header name to index
 			Map<String, Integer> colIndex = new HashMap<>();
 			for (int i = 0; i < headers.length; i++) {
 				colIndex.put(headers[i], i);
@@ -999,7 +998,7 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 				sheet.autoSizeColumn(i);
 			}
 
-			// ===== Utility to get Excel column letter =====
+			// ===== Excel Column Letter Mapping =====
 			Function<Integer, String> colLetter = col -> {
 				int dividend = col + 1;
 				StringBuilder colRef = new StringBuilder();
@@ -1011,9 +1010,8 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 				return colRef.toString();
 			};
 
-			// ===== Add Sample Rows with Formulas =====
 			int startRow = 1;
-			int totalRows = 10; // You can increase this as needed
+			int totalRows = 10;
 
 			for (int r = 0; r < totalRows; r++) {
 				Row row = sheet.createRow(startRow + r);
@@ -1021,89 +1019,281 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 					row.createCell(i).setCellValue("");
 				}
 
-				int excelRowNum = startRow + r + 1; // Excel rows are 1-based
+				int excelRowNum = startRow + r + 1;
 
-				// Indent DIFF = (Available + Required) - Indent
-				// ===== Updated Formula Cells With IF Conditions =====
 				row.getCell(colIndex.get("Indent DIFF"))
-						.setCellFormula("IF(AND(ISNUMBER(" + colLetter.apply(colIndex.get("Available Quantity"))
-								+ excelRowNum + "),ISNUMBER(" + colLetter.apply(colIndex.get("Required Quantity"))
-								+ excelRowNum + "),ISNUMBER(" + colLetter.apply(colIndex.get("Indent Quantity"))
-								+ excelRowNum + ")),(" + colLetter.apply(colIndex.get("Available Quantity"))
-								+ excelRowNum + "+" + colLetter.apply(colIndex.get("Required Quantity")) + excelRowNum
-								+ ")-" + colLetter.apply(colIndex.get("Indent Quantity")) + excelRowNum + ",\"\")");
+						.setCellFormula(String.format(
+								"IF(AND(ISNUMBER(%s%d),ISNUMBER(%s%d),ISNUMBER(%s%d)),(%s%d+%s%d)-%s%d,\"\")",
+								colLetter.apply(colIndex.get("Available Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Required Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Indent Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Available Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Required Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Indent Quantity")), excelRowNum));
 
 				row.getCell(colIndex.get("Planned DIFF"))
-						.setCellFormula("IF(AND(ISNUMBER(" + colLetter.apply(colIndex.get("Planned Quantity"))
-								+ excelRowNum + "),ISNUMBER(" + colLetter.apply(colIndex.get("Indent Quantity"))
-								+ excelRowNum + ")), " + colLetter.apply(colIndex.get("Planned Quantity")) + excelRowNum
-								+ "-" + colLetter.apply(colIndex.get("Indent Quantity")) + excelRowNum + ",\"\")");
+						.setCellFormula(String.format("IF(AND(ISNUMBER(%s%d),ISNUMBER(%s%d)),%s%d-%s%d,\"\")",
+								colLetter.apply(colIndex.get("Planned Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Indent Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Planned Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Indent Quantity")), excelRowNum));
 
 				row.getCell(colIndex.get("Packed DIFF"))
-						.setCellFormula("IF(AND(ISNUMBER(" + colLetter.apply(colIndex.get("Packed Quantity"))
-								+ excelRowNum + "),ISNUMBER(" + colLetter.apply(colIndex.get("Planned Quantity"))
-								+ excelRowNum + ")), " + colLetter.apply(colIndex.get("Packed Quantity")) + excelRowNum
-								+ "-" + colLetter.apply(colIndex.get("Planned Quantity")) + excelRowNum + ",\"\")");
+						.setCellFormula(String.format("IF(AND(ISNUMBER(%s%d),ISNUMBER(%s%d)),%s%d-%s%d,\"\")",
+								colLetter.apply(colIndex.get("Packed Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Planned Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Packed Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Planned Quantity")), excelRowNum));
 
 				row.getCell(colIndex.get("Dispatched DIFF"))
-						.setCellFormula("IF(AND(ISNUMBER(" + colLetter.apply(colIndex.get("Dispatched Quantity"))
-								+ excelRowNum + "),ISNUMBER(" + colLetter.apply(colIndex.get("Packed Quantity"))
-								+ excelRowNum + ")), " + colLetter.apply(colIndex.get("Dispatched Quantity"))
-								+ excelRowNum + "-" + colLetter.apply(colIndex.get("Packed Quantity")) + excelRowNum
-								+ ",\"\")");
+						.setCellFormula(String.format("IF(AND(ISNUMBER(%s%d),ISNUMBER(%s%d)),%s%d-%s%d,\"\")",
+								colLetter.apply(colIndex.get("Dispatched Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Packed Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Dispatched Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Packed Quantity")), excelRowNum));
 
 				row.getCell(colIndex.get("Received DIFF"))
-						.setCellFormula("IF(AND(ISNUMBER(" + colLetter.apply(colIndex.get("Received Quantity"))
-								+ excelRowNum + "),ISNUMBER(" + colLetter.apply(colIndex.get("Dispatched Quantity"))
-								+ excelRowNum + ")), " + colLetter.apply(colIndex.get("Received Quantity"))
-								+ excelRowNum + "-" + colLetter.apply(colIndex.get("Dispatched Quantity")) + excelRowNum
-								+ ",\"\")");
-
+						.setCellFormula(String.format("IF(AND(ISNUMBER(%s%d),ISNUMBER(%s%d)),%s%d-%s%d,\"\")",
+								colLetter.apply(colIndex.get("Received Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Dispatched Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Received Quantity")), excelRowNum,
+								colLetter.apply(colIndex.get("Dispatched Quantity")), excelRowNum));
 			}
 
-			// ===== Return Excel File =====
+			// ===== Return Response =====
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
 			workbook.write(out);
+			byte[] fileBytes = out.toByteArray();
 
 			return ResponseEntity.ok()
-					.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=quantity_template.xlsx")
-					.contentType(MediaType.APPLICATION_OCTET_STREAM).body(new ByteArrayResource(out.toByteArray()));
+					.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"quantity_template.xlsx\"")
+					.contentType(MediaType
+							.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+					.contentLength(fileBytes.length).body(new ByteArrayResource(fileBytes));
 
 		} catch (IOException e) {
+			e.printStackTrace(); // Log in Render logs
 			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to generate template", e);
 		}
 	}
 
 	public Map<String, Object> executeAnyQuery(String sql) {
-	    Map<String, Object> response = new HashMap<>();
-	    String database = "sri_krishna_db";
-	    HikariDataSource newDataSource = null;
-	    Connection conn = null;
-	    Statement stmt = null;
+		Map<String, Object> response = new HashMap<>();
+		String database = "sri_krishna_db";
+		HikariDataSource newDataSource = null;
+		Connection conn = null;
+		Statement stmt = null;
 
-	    try {
-	        newDataSource = customDataSource.dynamicDatabaseChange(database);
-	        conn = newDataSource.getConnection();
-	        stmt = conn.createStatement();
+		try {
+			newDataSource = customDataSource.dynamicDatabaseChange(database);
+			conn = newDataSource.getConnection();
+			stmt = conn.createStatement();
 
-	        stmt.execute(sql);
+			stmt.execute(sql);
 
-	        response.put("result", true);
-	        response.put("message", "✅ Query executed successfully.");
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	        response.put("result", false);
-	        response.put("message", "❌ Error: " + e.getMessage());
-	    } finally {
-	        try {
-	            if (stmt != null) stmt.close();
-	            if (conn != null) conn.close();
-	            if (newDataSource != null) newDataSource.close();
-	        } catch (Exception ignored) {}
-	    }
+			response.put("result", true);
+			response.put("message", "✅ Query executed successfully.");
+		} catch (Exception e) {
+			e.printStackTrace();
+			response.put("result", false);
+			response.put("message", "❌ Error: " + e.getMessage());
+		} finally {
+			try {
+				if (stmt != null)
+					stmt.close();
+				if (conn != null)
+					conn.close();
+				if (newDataSource != null)
+					newDataSource.close();
+			} catch (Exception ignored) {
+			}
+		}
 
-	    return response;
+		return response;
 	}
 
+	@Override
+	public Map<String, Object> fetchSummaryOnly(LocalDate reportDate) {
+		Map<String, Object> response = new HashMap<>();
+		Map<String, Object> pageSummary = new HashMap<>();
+		Map<String, Object> totalSummary = new HashMap<>();
+
+		String summarySql = """
+				    SELECT SUM(val::NUMERIC) FILTER (WHERE key = 'indent_qty')        AS total_indent,
+				           SUM(val::NUMERIC) FILTER (WHERE key = 'available_qty')    AS total_available,
+				           SUM(val::NUMERIC) FILTER (WHERE key = 'required_qty')     AS total_required,
+				           SUM(val::NUMERIC) FILTER (WHERE key = 'planned_qty')      AS total_planned,
+				           SUM(val::NUMERIC) FILTER (WHERE key = 'packed_qty')       AS total_packed,
+				           SUM(val::NUMERIC) FILTER (WHERE key = 'dispatched_qty')   AS total_dispatched,
+				           SUM(val::NUMERIC) FILTER (WHERE key = 'received_qty')     AS total_received
+				    FROM indent_vs_delivery_data p
+				    JOIN indent_vs_delivery m ON p.product_id = m.id,
+				    LATERAL (
+				        SELECT 'indent_qty' AS key, jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.indent_qty->'data') = 'array' THEN p.indent_qty->'data' ELSE jsonb_build_array(p.indent_qty->'data') END) AS val
+				        UNION ALL
+				        SELECT 'available_qty', jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.available_qty->'data') = 'array' THEN p.available_qty->'data' ELSE jsonb_build_array(p.available_qty->'data') END)
+				        UNION ALL
+				        SELECT 'required_qty', jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.required_qty->'data') = 'array' THEN p.required_qty->'data' ELSE jsonb_build_array(p.required_qty->'data') END)
+				        UNION ALL
+				        SELECT 'planned_qty', jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.planned_qty->'data') = 'array' THEN p.planned_qty->'data' ELSE jsonb_build_array(p.planned_qty->'data') END)
+				        UNION ALL
+				        SELECT 'packed_qty', jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.packed_qty->'data') = 'array' THEN p.packed_qty->'data' ELSE jsonb_build_array(p.packed_qty->'data') END)
+				        UNION ALL
+				        SELECT 'dispatched_qty', jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.dispatched_qty->'data') = 'array' THEN p.dispatched_qty->'data' ELSE jsonb_build_array(p.dispatched_qty->'data') END)
+				        UNION ALL
+				        SELECT 'received_qty', jsonb_array_elements_text(CASE WHEN jsonb_typeof(p.received_qty->'data') = 'array' THEN p.received_qty->'data' ELSE jsonb_build_array(p.received_qty->'data') END)
+				    ) AS expanded
+				    WHERE p.report_date = ?
+				""";
+
+		String baseSelect = """
+				    SELECT p.id, p.report_date,
+				           m.category, m.pack_format, m.section, m.code, m.product,
+				           p.indent_qty, p.available_qty, p.required_qty,
+				           p.planned_qty, p.packed_qty, p.dispatched_qty, p.received_qty,
+				           p.reason, p.difference, p.planned_difference, p.planned_reason,
+				           p.packed_difference, p.packed_reason,
+				           p.dispatched_difference, p.dispatched_reason,
+				           p.received_difference, p.received_reason
+				    FROM indent_vs_delivery_data p
+				    JOIN indent_vs_delivery m ON p.product_id = m.id
+				    WHERE p.report_date = ?
+				""";
+
+		String countSql = """
+				    SELECT COUNT(*)
+				    FROM indent_vs_delivery_data p
+				    JOIN indent_vs_delivery m ON p.product_id = m.id
+				    WHERE p.report_date = ?
+				""";
+
+		HikariDataSource dataSource = null;
+		Connection conn = null;
+		PreparedStatement ps = null;
+
+		try {
+			dataSource = customDataSource.dynamicDatabaseChange("test");
+			conn = dataSource.getConnection();
+
+			// --- Summary
+			ps = conn.prepareStatement(summarySql);
+			ps.setDate(1, Date.valueOf(reportDate));
+			try (ResultSet rs = ps.executeQuery()) {
+				if (rs.next()) {
+					totalSummary.put("totalIndent", formatNumberRounded(rs.getDouble("total_indent")));
+					totalSummary.put("totalAvailable", formatNumberRounded(rs.getDouble("total_available")));
+					totalSummary.put("totalRequired", formatNumberRounded(rs.getDouble("total_required")));
+					totalSummary.put("totalPlanned", formatNumberRounded(rs.getDouble("total_planned")));
+					totalSummary.put("totalPacked", formatNumberRounded(rs.getDouble("total_packed")));
+					totalSummary.put("totalDispatched", formatNumberRounded(rs.getDouble("total_dispatched")));
+					totalSummary.put("totalReceived", formatNumberRounded(rs.getDouble("total_received")));
+				}
+			}
+			ps.close();
+
+			// --- Count total items
+			int totalItems = 0;
+			ps = conn.prepareStatement(countSql);
+			ps.setDate(1, Date.valueOf(reportDate));
+			try (ResultSet rs = ps.executeQuery()) {
+				if (rs.next()) {
+					totalItems = rs.getInt(1);
+				}
+			}
+			ps.close();
+
+			// --- Fetch paginated records and page summary
+			double totalIndent = 0, totalAvailable = 0, totalRequired = 0;
+			double totalPlanned = 0, totalPacked = 0, totalDispatched = 0, totalReceived = 0;
+			int countIndent = 0, countAvailable = 0, countRequired = 0;
+			int countPlanned = 0, countPacked = 0, countDispatched = 0, countReceived = 0;
+
+			ps = conn.prepareStatement(baseSelect);
+			ps.setDate(1, Date.valueOf(reportDate));
+			try (ResultSet rs = ps.executeQuery()) {
+				while (rs.next()) {
+
+					IndentDeliveryDataDto model = new IndentDeliveryDataDto();
+
+					model.setIndentQtyJson(rs.getString("indent_qty"));
+					model.setAvailableQtyJson(rs.getString("available_qty"));
+					model.setRequiredQtyJson(rs.getString("required_qty"));
+					model.setPlannedQtyJson(rs.getString("planned_qty"));
+					model.setPackedQtyJson(rs.getString("packed_qty"));
+					model.setDispatchedQtyJson(rs.getString("dispatched_qty"));
+					model.setReceivedQtyJson(rs.getString("received_qty"));
+
+					double indent = sumJsonArray(model.getIndentQtyJson());
+					double available = sumJsonArray(model.getAvailableQtyJson());
+					double required = sumJsonArray(model.getRequiredQtyJson());
+					double planned = sumJsonArray(model.getPlannedQtyJson());
+					double packed = sumJsonArray(model.getPackedQtyJson());
+					double dispatched = sumJsonArray(model.getDispatchedQtyJson());
+					double received = sumJsonArray(model.getReceivedQtyJson());
+
+					totalIndent += indent;
+					totalAvailable += available;
+					totalRequired += required;
+					totalPlanned += planned;
+					totalPacked += packed;
+					totalDispatched += dispatched;
+					totalReceived += received;
+
+					if (indent > 0)
+						countIndent++;
+					if (available > 0)
+						countAvailable++;
+					if (required > 0)
+						countRequired++;
+					if (planned > 0)
+						countPlanned++;
+					if (packed > 0)
+						countPacked++;
+					if (dispatched > 0)
+						countDispatched++;
+					if (received > 0)
+						countReceived++;
+
+				}
+			}
+
+			pageSummary.put("totalIndent", formatNumberRounded(totalIndent));
+			pageSummary.put("totalAvailable", formatNumberRounded(totalAvailable));
+			pageSummary.put("totalRequired", formatNumberRounded(totalRequired));
+			pageSummary.put("totalPlanned", formatNumberRounded(totalPlanned));
+			pageSummary.put("totalPacked", formatNumberRounded(totalPacked));
+			pageSummary.put("totalDispatched", formatNumberRounded(totalDispatched));
+			pageSummary.put("totalReceived", formatNumberRounded(totalReceived));
+			pageSummary.put("productWithIndent", (double) countIndent);
+			pageSummary.put("productWithAvailable", (double) countAvailable);
+			pageSummary.put("productWithRequired", (double) countRequired);
+			pageSummary.put("productWithPlanned", (double) countPlanned);
+			pageSummary.put("productWithPacked", (double) countPacked);
+			pageSummary.put("productWithDispatched", (double) countDispatched);
+			pageSummary.put("productWithReceived", (double) countReceived);
+			pageSummary.put("totalProducts", (double) totalItems);
+
+			response.put("result", true);
+			response.put("summary", totalSummary);
+			response.put("pageSummary", pageSummary);
+		} catch (Exception e) {
+			e.printStackTrace();
+			response.put("result", false);
+			response.put("message", "Error occurred while fetching data.");
+		} finally {
+			try {
+				if (ps != null)
+					ps.close();
+				if (conn != null)
+					conn.close();
+				if (dataSource != null)
+					dataSource.close();
+			} catch (SQLException ex) {
+				ex.printStackTrace();
+			}
+		}
+
+		return response;
+	}
 
 }
