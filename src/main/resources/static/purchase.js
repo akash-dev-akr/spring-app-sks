@@ -172,6 +172,8 @@ function uploadBudget() {
       setTimeout(() => buildDashboard(), 1000);
     })
     .catch(() => showToast("❌ Error uploading purchase file.", false));
+      fetchSummaryCards();
+  applyFilters();
 }
 function uploadStock() {
   const file = document.getElementById("stockFile").files[0];
@@ -210,6 +212,8 @@ function uploadStock() {
       setTimeout(() => buildDashboard(), 1000);
     })
     .catch(() => showToast("❌ Error uploading stock file.", false));
+      fetchSummaryCards();
+  applyFilters();
 }
 
 function toggleOverallUpload() {
@@ -296,6 +300,8 @@ function saveEdit() {
       console.error("Error:", err);
       showToast("❌ Error sending data.", false);
     });
+  fetchSummaryCards();
+  applyFilters();
 }
 
 
@@ -381,36 +387,36 @@ function applyFilters() {
         totalPages = json.totalPages || 1;
         buildDashboard();
         fetchSummaryCards();
-       // ✅ Format date + time: YYYY-MM-DD HH:mm:ss (24-hour format)
-const formatDateTime = (d) => {
-  if (!(d instanceof Date) || isNaN(d)) return '-';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
-};
-// ✅ Update purchase upload time if available
-if (json.latest_purchaseupload_at) {
-  const purchaseDate = new Date(json.latest_purchaseupload_at);
-  document.getElementById('lastPurchaseTime').innerHTML =
-    '<strong>Purchase Updated At:</strong> ' + formatDateTime(purchaseDate);
-} else {
-  document.getElementById('lastPurchaseTime').innerHTML =
-    '<strong>Purchase Updated At:</strong> -';
-}
+        // ✅ Format date + time: YYYY-MM-DD HH:mm:ss (24-hour format)
+        const formatDateTime = (d) => {
+          if (!(d instanceof Date) || isNaN(d)) return '-';
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const hh = String(d.getHours()).padStart(2, '0');
+          const min = String(d.getMinutes()).padStart(2, '0');
+          const ss = String(d.getSeconds()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+        };
+        // ✅ Update purchase upload time if available
+        if (json.latest_purchaseupload_at) {
+          const purchaseDate = new Date(json.latest_purchaseupload_at);
+          document.getElementById('lastPurchaseTime').innerHTML =
+            '<strong>Purchase Updated At:</strong> ' + formatDateTime(purchaseDate);
+        } else {
+          document.getElementById('lastPurchaseTime').innerHTML =
+            '<strong>Purchase Updated At:</strong> -';
+        }
 
-// ✅ Update stock upload time if available
-if (json.latest_stockupload_at) {
-  const stockDate = new Date(json.latest_stockupload_at);
-  document.getElementById('lastStockTime').innerHTML =
-    '<strong>Stock Updated At:</strong> ' + formatDateTime(stockDate);
-} else {
-  document.getElementById('lastStockTime').innerHTML =
-    '<strong>Stock Updated At:</strong> -';
-}
+        // ✅ Update stock upload time if available
+        if (json.latest_stockupload_at) {
+          const stockDate = new Date(json.latest_stockupload_at);
+          document.getElementById('lastStockTime').innerHTML =
+            '<strong>Stock Updated At:</strong> ' + formatDateTime(stockDate);
+        } else {
+          document.getElementById('lastStockTime').innerHTML =
+            '<strong>Stock Updated At:</strong> -';
+        }
 
 
 
@@ -702,4 +708,6 @@ function uploadoverall() {
       applyFilters(); // if needed
     })
     .catch(() => showToast("❌ Upload error.", false));
+  fetchSummaryCards();
+  applyFilters();
 }
