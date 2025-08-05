@@ -381,34 +381,38 @@ function applyFilters() {
         totalPages = json.totalPages || 1;
         buildDashboard();
         fetchSummaryCards();
-        // ✅ Format date + time: YYYY-MM-DD HH:mm:ss
-        const formatDateTime = (d) => {
-          const yyyy = d.getFullYear();
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const dd = String(d.getDate()).padStart(2, '0');
+       // ✅ Format date + time: YYYY-MM-DD HH:mm:ss (24-hour format)
+const formatDateTime = (d) => {
+  if (!(d instanceof Date) || isNaN(d)) return '-';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+};
+// ✅ Update purchase upload time if available
+if (json.latest_purchaseupload_at) {
+  const purchaseDate = new Date(json.latest_purchaseupload_at);
+  document.getElementById('lastPurchaseTime').innerHTML =
+    '<strong>Purchase Updated At:</strong> ' + formatDateTime(purchaseDate);
+} else {
+  document.getElementById('lastPurchaseTime').innerHTML =
+    '<strong>Purchase Updated At:</strong> -';
+}
 
-          let hh = d.getHours();
-          const min = String(d.getMinutes()).padStart(2, '0');
-          const ss = String(d.getSeconds()).padStart(2, '0');
-          const ampm = hh >= 12 ? 'pm' : 'am';
-          hh = hh % 12;
-          hh = hh ? hh : 12; // 0 becomes 12
-          hh = String(hh).padStart(2, '0');
+// ✅ Update stock upload time if available
+if (json.latest_stockupload_at) {
+  const stockDate = new Date(json.latest_stockupload_at);
+  document.getElementById('lastStockTime').innerHTML =
+    '<strong>Stock Updated At:</strong> ' + formatDateTime(stockDate);
+} else {
+  document.getElementById('lastStockTime').innerHTML =
+    '<strong>Stock Updated At:</strong> -';
+}
 
-          return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss} ${ampm}`;
-        };
 
-        if (json.latest_purchaseupload_at) {
-          const purchaseDate = new Date(json.latest_purchaseupload_at);
-          document.getElementById('lastPurchaseTime').textContent =
-            '' + formatDateTime(purchaseDate);
-        }
-
-        if (json.latest_stockupload_at) {
-          const stockDate = new Date(json.latest_stockupload_at);
-          document.getElementById('lastStockTime').textContent =
-            '' + formatDateTime(stockDate);
-        }
 
       } else {
         rawData = [];

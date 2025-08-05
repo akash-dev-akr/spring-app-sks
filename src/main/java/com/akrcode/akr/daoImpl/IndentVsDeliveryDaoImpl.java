@@ -1172,7 +1172,7 @@ public class IndentVsDeliveryDaoImpl implements IndentVsDeliveryDao {
 		PreparedStatement ps = null;
 
 		try {
-			dataSource = customDataSource.dynamicDatabaseChange("test");
+			dataSource = customDataSource.dynamicDatabaseChange("sri_krishna_db");
 			conn = dataSource.getConnection();
 
 			// --- Summary

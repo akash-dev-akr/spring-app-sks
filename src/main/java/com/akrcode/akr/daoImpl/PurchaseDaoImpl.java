@@ -828,44 +828,56 @@ public class PurchaseDaoImpl implements PurchaseDao {
 
 	@Override
 	public List<String> getSuggestions(String type, String query) {
-		List<String> suggestions = new ArrayList<>();
-		Set<String> allowed = Set.of("category", "sub_category", "supplier", "status");
+	    List<String> suggestions = new ArrayList<>();
+	    Set<String> allowed = Set.of("category", "sub_category", "supplier", "status");
 
-		if (!allowed.contains(type)) {
-			throw new IllegalArgumentException("Invalid type: " + type);
-		}
+	    if (!allowed.contains(type)) {
+	        throw new IllegalArgumentException("Invalid type: " + type);
+	    }
 
-		String database = "sri_krishna_db";
-		HikariDataSource ds = null;
-		try {
-			ds = customDataSource.dynamicDatabaseChange(database);
-			try (Connection conn = ds.getConnection()) {
-				String sql = "SELECT DISTINCT " + type + " FROM product_tracker "
-						+ (query == null || query.trim().isEmpty() ? "" : "WHERE LOWER(" + type + ") LIKE LOWER(?) ")
-						+ "ORDER BY " + type + " LIMIT 10";
+	    String database = "sri_krishna_db";
+	    HikariDataSource ds = null;
 
-				try (PreparedStatement ps = conn.prepareStatement(sql)) {
-					if (query != null && !query.trim().isEmpty()) {
-						ps.setString(1, "%" + query.trim() + "%");
-					}
-					try (ResultSet rs = ps.executeQuery()) {
-						while (rs.next()) {
-							String value = rs.getString(1);
-							if (value != null && !value.trim().isEmpty()) {
-								suggestions.add(value.trim());
-							}
-						}
-					}
-				}
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		} finally {
-			if (ds != null)
-				ds.close();
-		}
+	    try {
+	        ds = customDataSource.dynamicDatabaseChange(database);
+	        try (Connection conn = ds.getConnection()) {
 
-		return suggestions;
+	            String sql;
+	            if ("status".equals(type)) {
+	                // Pull status suggestions from product_tracker_history via join
+	                sql = "SELECT DISTINCT pth.status FROM product_tracker_history pth " +
+	                      "JOIN product_tracker pt ON pt.code = pth.code " +
+	                      (query == null || query.trim().isEmpty() ? "" : "WHERE LOWER(pth.status) LIKE LOWER(?) ") +
+	                      "ORDER BY pth.status LIMIT 50";
+	            } else {
+	                // Default: Pull suggestions from product_tracker
+	                sql = "SELECT DISTINCT " + type + " FROM product_tracker " +
+	                      (query == null || query.trim().isEmpty() ? "" : "WHERE LOWER(" + type + ") LIKE LOWER(?) ") +
+	                      "ORDER BY " + type + " LIMIT 10";
+	            }
+
+	            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+	                if (query != null && !query.trim().isEmpty()) {
+	                    ps.setString(1, "%" + query.trim() + "%");
+	                }
+
+	                try (ResultSet rs = ps.executeQuery()) {
+	                    while (rs.next()) {
+	                        String value = rs.getString(1);
+	                        if (value != null && !value.trim().isEmpty()) {
+	                            suggestions.add(value.trim());
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    } finally {
+	        if (ds != null) ds.close();
+	    }
+
+	    return suggestions;
 	}
 
 	@Override
