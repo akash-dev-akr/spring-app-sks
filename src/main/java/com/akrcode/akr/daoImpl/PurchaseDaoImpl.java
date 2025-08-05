@@ -307,7 +307,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 				params.add(search.getStatus().trim());
 			}
 			if (search.getDate() != null) {
-				conditions.add("GREATEST(COALESCE(created_at, '1900-01-01'), COALESCE(updated_at, '1900-01-01'))::date =?");
+				conditions.add("GREATEST(COALESCE(ph.created_at, '1900-01-01'), COALESCE(ph.updated_at, '1900-01-01'))::date =?");
 				LocalDate localDate = LocalDate.parse(search.getDate());
 				params.add(Date.valueOf(localDate));
 			}
@@ -914,7 +914,7 @@ public class PurchaseDaoImpl implements PurchaseDao {
 				params.add(search.getStatus().trim());
 			}
 			if (search.getDate() != null) {
-				conditions.add("GREATEST(COALESCE(created_at, '1900-01-01'), COALESCE(updated_at, '1900-01-01'))::date =?");
+				conditions.add("GREATEST(COALESCE(ph.created_at, '1900-01-01'), COALESCE(ph.updated_at, '1900-01-01'))::date =?");
 				LocalDate localDate = LocalDate.parse(search.getDate());
 				params.add(Date.valueOf(localDate));
 			}
