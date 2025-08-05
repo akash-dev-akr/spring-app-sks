@@ -295,10 +295,10 @@ public class PurchaseRestController {
 					}
 				}
 
-				// Auto-size all columns
 				for (int i = 0; i < columns.length; i++) {
-					sheet.autoSizeColumn(i);
+					sheet.setColumnWidth(i, 20 * 256); // 20 characters wide
 				}
+
 
 				// Set response headers
 				response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
