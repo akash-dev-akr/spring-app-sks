@@ -45,6 +45,7 @@ import com.akrcode.akr.dto.SearchKeys;
 import com.akrcode.akr.service.PurchaseService;
 import com.zaxxer.hikari.HikariDataSource;
 
+import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServletResponse;
 
 @RestController
@@ -175,149 +176,158 @@ public class PurchaseRestController {
 		String database = "sri_krishna_db";
 		HikariDataSource dataSource = null;
 
-		try (Connection conn = (dataSource = customDataSource.dynamicDatabaseChange(database)).getConnection()) {
-
-			// Build conditions
-			List<String> conditions = new ArrayList<>();
-			List<Object> params = new ArrayList<>();
-
-			if (search.getCategory() != null && !search.getCategory().isBlank()) {
-				conditions.add("pt.category = ?");
-				params.add(search.getCategory().trim());
-			}
-			if (search.getSupplier() != null && !search.getSupplier().isBlank()) {
-				conditions.add("pt.supplier = ?");
-				params.add(search.getSupplier().trim());
-			}
-			if (search.getStatus() != null && !search.getStatus().isBlank()) {
-				conditions.add("ph.status = ?");
-				params.add(search.getStatus().trim());
+		try {
+			dataSource = customDataSource.dynamicDatabaseChange(database);
+			if (dataSource == null) {
+				System.err.println("Failed to get DataSource for DB: " + database);
+				response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+				return;
 			}
 
-			String whereClause = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
+			try (Connection conn = dataSource.getConnection()) {
 
-			String sql = """
-					    SELECT pt.id, pt.category, pt.sub_category, pt.code, pt.product_name, pt.supplier,
-					           ph.budget_qty, ph.budget_value, ph.purchased_qty, ph.purchased_value,
-					           ph.min_stock_qty, ph.max_stock_qty, ph.moq, ph.lead_time, ph.schedule,
-					           ph.stock_in_hand, ph.stock_in_hand_value, ph.status, ph.remarks, ph.date,
-					           ph.created_at, ph.updated_at
-					    FROM product_tracker pt
-					    LEFT JOIN (
-					        SELECT DISTINCT ON (code) *
-					        FROM (
-					            SELECT *,
-					                   GREATEST(COALESCE(created_at, '1900-01-01'), COALESCE(updated_at, '1900-01-01')) AS effective_date
-					            FROM product_tracker_history
-					        ) sub
-					        ORDER BY code, effective_date DESC
-					    ) ph ON pt.code = ph.code
-					"""
-					+ whereClause + " ORDER BY pt.id";
+				List<String> conditions = new ArrayList<>();
+				List<Object> params = new ArrayList<>();
 
-			// Excel export
-			XSSFWorkbook workbook = new XSSFWorkbook();
-			XSSFSheet sheet = workbook.createSheet("Purchase Report");
-
-			int rowNum = 0;
-			String[] columns = { "Category", "Sub Category", "Code", "Product Name", "Supplier", "Budget Qty",
-					"Budget Value", "Purchased Qty", "Purchased Value", "Min Stock Qty", "Max Stock Qty", "MOQ",
-					"Lead Time", "Schedule", "Stock In Hand", "Stock In Hand Value", "Status", "Remarks", "Date" };
-
-			// Create header style with green background
-			XSSFCellStyle headerStyle = workbook.createCellStyle();
-			XSSFFont headerFont = workbook.createFont();
-			headerFont.setBold(true);
-			headerFont.setColor(IndexedColors.WHITE.getIndex());
-			headerStyle.setFont(headerFont);
-			headerStyle.setFillForegroundColor(IndexedColors.GREEN.getIndex());
-			headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-
-			// Create header row with green style
-			Row header = sheet.createRow(rowNum++);
-			for (int i = 0; i < columns.length; i++) {
-				XSSFCell cell = (XSSFCell) header.createCell(i);
-				cell.setCellValue(columns[i]);
-				cell.setCellStyle(headerStyle);
-			}
-
-			try (PreparedStatement ps = conn.prepareStatement(sql)) {
-				for (int i = 0; i < params.size(); i++) {
-					ps.setObject(i + 1, params.get(i));
+				if (search.getCategory() != null && !search.getCategory().isBlank()) {
+					conditions.add("pt.category = ?");
+					params.add(search.getCategory().trim());
+				}
+				if (search.getSupplier() != null && !search.getSupplier().isBlank()) {
+					conditions.add("pt.supplier = ?");
+					params.add(search.getSupplier().trim());
+				}
+				if (search.getStatus() != null && !search.getStatus().isBlank()) {
+					conditions.add("ph.status = ?");
+					params.add(search.getStatus().trim());
 				}
 
-				try (ResultSet rs = ps.executeQuery()) {
-					while (rs.next()) {
+				String whereClause = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
 
-						Row row = sheet.createRow(rowNum++);
-						int col = 0;
-						row.createCell(col++).setCellValue(rs.getString("category"));
-						row.createCell(col++).setCellValue("sub_category");
-						row.createCell(col++).setCellValue(rs.getString("code"));
-						row.createCell(col++).setCellValue(rs.getString("product_name"));
-						row.createCell(col++).setCellValue(rs.getString("supplier"));
+				String sql = """
+						SELECT pt.id, pt.category, pt.sub_category, pt.code, pt.product_name, pt.supplier,
+						       ph.budget_qty, ph.budget_value, ph.purchased_qty, ph.purchased_value,
+						       ph.min_stock_qty, ph.max_stock_qty, ph.moq, ph.lead_time, ph.schedule,
+						       ph.stock_in_hand, ph.stock_in_hand_value, ph.status, ph.remarks, ph.date,
+						       ph.created_at, ph.updated_at
+						FROM product_tracker pt
+						LEFT JOIN (
+						    SELECT DISTINCT ON (code) *
+						    FROM (
+						        SELECT *,
+						               GREATEST(COALESCE(created_at, '1900-01-01'), COALESCE(updated_at, '1900-01-01')) AS effective_date
+						        FROM product_tracker_history
+						    ) sub
+						    ORDER BY code, effective_date DESC
+						) ph ON pt.code = ph.code
+						"""
+						+ whereClause + " ORDER BY pt.id";
 
-						BigDecimal budgetQty = rs.getBigDecimal("budget_qty");
-						row.createCell(col++).setCellValue(budgetQty != null ? budgetQty.doubleValue() : 0.0);
-						BigDecimal budgetValue = rs.getBigDecimal("budget_value");
-						row.createCell(col++).setCellValue(budgetValue != null ? budgetValue.doubleValue() : 0.0);
-//						row.createCell(col++).setCellValue(rs.getObject("purchased_qty", Integer.class));
-//						row.createCell(col++).setCellValue(rs.getObject("purchased_value", Integer.class));
-						 row.createCell(col++);
-						 row.createCell(col++);
-						row.createCell(col++).setCellValue(valueOf(rs.getObject("min_stock_qty", Integer.class)));
-						row.createCell(col++).setCellValue(valueOf(rs.getObject("max_stock_qty", Integer.class)));
-						Integer moq = rs.getObject("moq", Integer.class);
-						row.createCell(col++).setCellValue(moq != null ? moq : 0);
+				XSSFWorkbook workbook = new XSSFWorkbook();
+				XSSFSheet sheet = workbook.createSheet("Purchase Report");
 
-						row.createCell(col++).setCellValue(valueOf(rs.getObject("lead_time", Integer.class)));
-						row.createCell(col++).setCellValue(valueOf(rs.getInt("schedule")));
-						 row.createCell(col++);
-						 row.createCell(col++);
-//						row.createCell(col++).setCellValue(rs.getObject("stock_in_hand", Integer.class));
-//						BigDecimal stockInHandValue = rs.getBigDecimal("stock_in_hand_value");
-//						row.createCell(col++)
-//								.setCellValue(stockInHandValue != null ? stockInHandValue.doubleValue() : 0.0);
-						row.createCell(col++).setCellValue(rs.getString("status"));
-						row.createCell(col++).setCellValue(rs.getString("remarks"));
-						CellStyle dateCellStyle = workbook.createCellStyle();
-						CreationHelper createHelper = workbook.getCreationHelper();
-						dateCellStyle.setDataFormat(createHelper.createDataFormat().getFormat("dd-MMM-yyyy")); // or "yyyy-MM-dd"
+				int rowNum = 0;
+				String[] columns = { "Category", "Sub Category", "Code", "Product Name", "Supplier", "Budget Qty",
+						"Budget Value", "Purchased Qty", "Purchased Value", "Min Stock Qty", "Max Stock Qty", "MOQ",
+						"Lead Time", "Schedule", "Stock In Hand", "Stock In Hand Value", "Status", "Remarks", "Date" };
 
-						// Set date in cell
-						Cell dateCell = row.createCell(col++);
-						Date date = rs.getDate("date");
-						if (date != null) {
-						    dateCell.setCellValue(date);
-						    dateCell.setCellStyle(dateCellStyle);
-						} else {
-						    dateCell.setCellValue(""); // or handle null appropriately
+				// Header style
+				XSSFCellStyle headerStyle = workbook.createCellStyle();
+				XSSFFont headerFont = workbook.createFont();
+				headerFont.setBold(true);
+				headerFont.setColor(IndexedColors.WHITE.getIndex());
+				headerStyle.setFont(headerFont);
+				headerStyle.setFillForegroundColor(IndexedColors.GREEN.getIndex());
+				headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+				// Create header row
+				Row header = sheet.createRow(rowNum++);
+				for (int i = 0; i < columns.length; i++) {
+					Cell cell = header.createCell(i);
+					cell.setCellValue(columns[i]);
+					cell.setCellStyle(headerStyle);
+				}
+
+				try (PreparedStatement ps = conn.prepareStatement(sql)) {
+					for (int i = 0; i < params.size(); i++) {
+						ps.setObject(i + 1, params.get(i));
+					}
+
+					try (ResultSet rs = ps.executeQuery()) {
+						while (rs.next()) {
+							Row row = sheet.createRow(rowNum++);
+							int col = 0;
+
+							row.createCell(col++).setCellValue(rs.getString("category"));
+							row.createCell(col++).setCellValue(rs.getString("sub_category"));
+							row.createCell(col++).setCellValue(rs.getString("code"));
+							row.createCell(col++).setCellValue(rs.getString("product_name"));
+							row.createCell(col++).setCellValue(rs.getString("supplier"));
+
+							row.createCell(col++).setCellValue(getDouble(rs.getBigDecimal("budget_qty")));
+							row.createCell(col++).setCellValue(getDouble(rs.getBigDecimal("budget_value")));
+							row.createCell(col++).setCellValue(getDouble(rs.getBigDecimal("purchased_qty")));
+							row.createCell(col++).setCellValue(getDouble(rs.getBigDecimal("purchased_value")));
+
+							row.createCell(col++).setCellValue(valueOf(rs.getObject("min_stock_qty")));
+							row.createCell(col++).setCellValue(valueOf(rs.getObject("max_stock_qty")));
+							row.createCell(col++).setCellValue(valueOf(rs.getObject("moq")));
+							row.createCell(col++).setCellValue(valueOf(rs.getObject("lead_time")));
+							row.createCell(col++).setCellValue(valueOf(rs.getObject("schedule")));
+							row.createCell(col++).setCellValue(valueOf(rs.getObject("stock_in_hand")));
+							row.createCell(col++).setCellValue(getDouble(rs.getBigDecimal("stock_in_hand_value")));
+							row.createCell(col++).setCellValue(rs.getString("status"));
+							row.createCell(col++).setCellValue(rs.getString("remarks"));
+
+							// Date formatting
+							Cell dateCell = row.createCell(col++);
+							Date date = rs.getDate("date");
+							if (date != null) {
+								dateCell.setCellValue(date);
+								CellStyle dateCellStyle = workbook.createCellStyle();
+								CreationHelper createHelper = workbook.getCreationHelper();
+								dateCellStyle.setDataFormat(createHelper.createDataFormat().getFormat("dd-MMM-yyyy"));
+								dateCell.setCellStyle(dateCellStyle);
+							} else {
+								dateCell.setCellValue("");
+							}
 						}
-
 					}
 				}
-			}
-			for (int i = 0; i < columns.length; i++) {
-				sheet.autoSizeColumn(i);
-			}
 
-			response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-			response.setHeader("Content-Disposition", "attachment; filename=purchase_report.xlsx");
+				// Auto-size all columns
+				for (int i = 0; i < columns.length; i++) {
+					sheet.autoSizeColumn(i);
+				}
 
-			workbook.write(response.getOutputStream());
-			workbook.close();
+				// Set response headers
+				response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+				response.setHeader("Content-Disposition", "attachment; filename=purchase_report.xlsx");
+
+				try (ServletOutputStream out = response.getOutputStream()) {
+					workbook.write(out);
+					workbook.close();
+				}
+
+			}
 
 		} catch (Exception e) {
+			System.err.println("Exception during Excel download: " + e.getMessage());
 			e.printStackTrace();
 			response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
 		} finally {
-			if (dataSource != null)
+			if (dataSource != null) {
 				dataSource.close();
+			}
 		}
 	}
 
 	private String valueOf(Object obj) {
 		return obj != null ? obj.toString() : "";
+	}
+
+	private double getDouble(BigDecimal bd) {
+		return bd != null ? bd.doubleValue() : 0.0;
 	}
 
 }
