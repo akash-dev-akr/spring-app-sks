@@ -3,20 +3,20 @@ let currentReasonCell = null;
 
 let currentPage = 1;
 let totalPages = 1;
-let pageSize = 10; // Default limit
+let pageSize = 10;
+let rawData = [];
 
 $(document).ready(function () {
-
   fetchListingData();
 
-  // Limit selector change
+  // Limit Selector
   $("#limitSelector").on("change", function () {
     pageSize = parseInt($(this).val());
     currentPage = 1;
     fetchListingData();
   });
 
-  // Pagination controls
+  // Pagination
   $("#prevPage").on("click", function () {
     if (currentPage > 1) {
       currentPage--;
@@ -31,209 +31,26 @@ $(document).ready(function () {
     }
   });
 
-  // Search button
+  // Search Button
   $("#searchBtn").on("click", function () {
     currentPage = 1;
     fetchListingData();
   });
-  let currentEditCell = null;
 
-  // Utility: update total from inputs
-  function updateTotal() {
-    let total = 0;
-    $(".qtyInput").each(function () {
-      const val = parseFloat($(this).val());
-      if (!isNaN(val)) total += val;
-    });
-    $("#totalLabel").text(`Total: ${total}`);
-  }
-
-  // === QUANTITY MODAL ===
-  $("#dataTable").on("click", "td.editable", function () {
-    currentEditCell = $(this);
-    const field = currentEditCell.data("field");
-
-    const fieldLabels = {
-      indentQty: "Indent Qty",
-      availableQty: "Available Qty",
-      requiredQty: "Required Qty",
-      plannedQty: "Planned Qty",
-      packedQty: "Packed Qty",
-      dispatchedQty: "Dispatched Qty",
-      receivedQty: "Received Qty"
-    };
-
-    $("#fieldLabel").text(fieldLabels[field] || field); // label fix
-
-    let values = currentEditCell.data("values");
-    if (!values) {
-      const rawText = currentEditCell.text().trim().split("(")[1]?.replace(")", "") || "";
-      values = rawText.split("+").map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
-    }
-
-    $("#editFieldContainer").empty();
-    if (!Array.isArray(values)) values = [];
-
-    values.forEach(val => {
-      $("#editFieldContainer").append(`
-      <div class="input-group mb-2 value-row">
-        <input type="number" class="form-control qtyInput" value="${val}" />
-        <button class="btn btn-danger removeVal" type="button">&times;</button>
-      </div>
-    `);
-    });
-
-    updateTotal();
-    $("#rowModal").modal("show");
+  // Reset Filters
+  $("#resetBtn").on("click", function () {
+    $('#filterDate, #filterCategory, #filterPackFormat, #filterSection, #filterProduct').val('');
+    currentPage = 1;
+    totalPages = 1;
+    pageSize = 10;
+    fetchListingData();
   });
 
-  // Add value row
-  $("#cloneRow").on("click", function () {
-    $("#editFieldContainer").append(`
-    <div class="input-group mb-2 value-row">
-      <input type="number" class="form-control qtyInput" value="" />
-      <button class="btn btn-danger removeVal" type="button">&times;</button>
-    </div>
-  `);
-    updateTotal();
-  });
-
-  // Remove value row
-  $("#editFieldContainer").on("click", ".removeVal", function () {
-    $(this).closest(".value-row").remove();
-    updateTotal();
-  });
-
-  // Update total on input
-  $("#editFieldContainer").on("input", ".qtyInput", updateTotal);
-
-  // Save changes
-  $("#saveRowData").on("click", function () {
-    const values = $(".qtyInput").map(function () {
-      return parseFloat($(this).val()) || 0;
-    }).get().filter(v => v !== 0);
-
-    const total = values.reduce((a, b) => a + b, 0);
-
-    // Update cell display
-    currentEditCell.data("values", values);
-    currentEditCell.html(`
-    ${total.toFixed(2)}
-    <br><small class="text-muted">(${values.join(" + ")})</small>
-  `);
-
-    // Prepare payload for API
-    const row = currentEditCell.closest("tr");
-    const code = row.find("td:nth-child(5)").text().trim();         // update if code is in a different column
-    const reportDate = row.find("td:nth-child(1)").text().trim();   // update if date is in another column
-    const field = currentEditCell.data("field");
-
-    const payload = {
-      code: code,
-      field: field, // FIXED: no "Json" suffix
-      value: JSON.stringify({ data: values }),
-      date: reportDate
-    };
-
-    // Send update to backend
-    $.ajax({
-      url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/updatefieldbycode",
-      method: "POST",
-      contentType: "application/json",
-      data: JSON.stringify(payload),
-      success: function (response) {
-        console.log("✅ Received response:", response);
-        Swal.fire({
-          title: "Updated!",
-          text: response,
-          icon: "success",
-          confirmButtonText: "OK"
-        });
-        fetchListingData();
-      },
-
-      error: function (err) {
-        console.error("Failed to update quantity:", err);
-      }
-    });
-
-    $("#rowModal").modal("hide");
-  });
-
-  // === REASON MODAL ===
-  $("#dataTable").on("click", "td.reason-editable", function () {
-    currentReasonCell = $(this);
-    const existingReason = currentReasonCell.text().trim();
-    $("#reasonInput").val(existingReason);
-    $("#reasonModal").modal("show");
-  });
-
-  $("#saveReason").on("click", function () {
-    const newReason = $("#reasonInput").val().trim();
-    if (!currentReasonCell) return;
-
-    currentReasonCell.text(newReason);
-
-    const row = currentReasonCell.closest("tr");
-    const code = row.find("td:nth-child(5)").text().trim();
-    const colIndex = currentReasonCell.index();
-    const reportDate = row.find("td:nth-child(1)").text().trim();
-    const reasonFields = {
-      10: "reason",
-      13: "plannedReason",
-      16: "packedReason",
-      19: "dispatchedReason",
-      22: "receivedReason"
-    };
-    const field = reasonFields[colIndex];
-
-    if (!field) return;
-
-    const payload = {
-      code: code,
-      field: field,
-      value: newReason,
-      date: reportDate
-    };
-
-    $.ajax({
-      url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/updatereason",
-      method: "POST",
-      contentType: "application/json",
-      data: JSON.stringify(payload),
-      success: function () {
-        console.log("Reason updated:", field);
-      },
-      error: function (err) {
-        console.error("Failed to update reason:", err);
-      }
-    });
-
-    $("#reasonModal").modal("hide");
-  });
-});
-$('#resetBtn').on('click', function () {
-  $('#filterDate').val('');
-  $('#filterCategory').val('');
-  $('#filterPackFormat').val('');
-  $('#filterSection').val('');
-  $('#filterProduct').val('');
- currentPage = 1;
- totalPages = 1;
- pageSize = 10; 
-  fetchListingData();
+  // Filter change for differences
+  $('#differenceFilter, #filterPlannedDiff, #filterPackedDiff, #filterDispatchedDiff, #filterReceivedDiff')
+    .on('change', fetchListingData);
 });
 
-function updateTotal() {
-  const total = $(".qtyInput").toArray().reduce((sum, el) => {
-    return sum + (parseFloat($(el).val()) || 0);
-  }, 0);
-  $("#totalLabel").text(`Total: ${total.toFixed(2)}`);
-}
-$('#differenceFilter, #filterPlannedDiff, #filterPackedDiff, #filterDispatchedDiff, #filterReceivedDiff')
-  .on('change', fetchListingData);
-
-let rawData = [];
 function fetchListingData() {
   const requestData = {
     reportDate: $('#filterDate').val(),
@@ -253,7 +70,7 @@ function fetchListingData() {
   };
 
   $.ajax({
-    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/search",
+    url: "https://spring-app-sks.onrender.com/indentvsdelivery/search",
     method: "POST",
     contentType: "application/json",
     data: JSON.stringify(requestData),
@@ -263,7 +80,7 @@ function fetchListingData() {
 
       rawData.forEach((row, index) => {
         const tr = $("<tr>");
-        tr.append(`<td>${(currentPage - 1) * pageSize + index + 1}</td>`); // S.No
+        tr.append(`<td>${(currentPage - 1) * pageSize + index + 1}</td>`);
         tr.append(`<td>${row.reportDate || ""}</td>`);
         if (rawData.length > 0 && rawData[0].reportDate) {
           $('#filterDate').val(rawData[0].reportDate);
@@ -278,49 +95,271 @@ function fetchListingData() {
         tr.append(renderCell(row.availableQtyJson, "availableQty"));
         tr.append(renderCell(row.requiredQtyJson, "requiredQty"));
         tr.append(`<td>${formatNumber(row.difference)}</td>`);
-        tr.append(`<td class="reason-editable">${row.reason || ""}</td>`);
+        tr.append(`<td class="reason-editable" data-field="reason">${row.reason || ""}</td>`);
 
         tr.append(renderCell(row.plannedQtyJson, "plannedQty"));
         tr.append(`<td>${formatNumber(row.plannedDifference)}</td>`);
-        tr.append(`<td class="reason-editable">${row.plannedReason || ""}</td>`);
+        tr.append(`<td class="reason-editable" data-field="plannedReason">${row.plannedReason || ""}</td>`);
 
         tr.append(renderCell(row.packedQtyJson, "packedQty"));
         tr.append(`<td>${formatNumber(row.packedDifference)}</td>`);
-        tr.append(`<td class="reason-editable">${row.packedReason || ""}</td>`);
+        tr.append(`<td class="reason-editable" data-field="packedReason">${row.packedReason || ""}</td>`);
 
         tr.append(renderCell(row.dispatchedQtyJson, "dispatchedQty"));
         tr.append(`<td>${formatNumber(row.dispatchedDifference)}</td>`);
-        tr.append(`<td class="reason-editable">${row.dispatchedReason || ""}</td>`);
+        tr.append(`<td class="reason-editable" data-field="dispatchedReason">${row.dispatchedReason || ""}</td>`);
 
         tr.append(renderCell(row.receivedQtyJson, "receivedQty"));
         tr.append(`<td>${formatNumber(row.receivedDifference)}</td>`);
-        tr.append(`<td class="reason-editable">${row.receivedReason || ""}</td>`);
+        tr.append(`<td class="reason-editable" data-field="receivedReason">${row.receivedReason || ""}</td>`);
 
         tbody.append(tr);
       });
 
       setupAutocomplete();
 
-      // Pagination
       totalPages = response.totalPages || 1;
       $("#pageInfo").text(`Page ${currentPage} of ${totalPages}`);
 
-      // Call summary API separately
-      fetchSummaryCards(rawData[0].reportDate);
+      fetchSummaryCards(rawData[0]?.reportDate);
     },
     error: function (err) {
-      alert("Failed to fetch data");
-      console.error(err);
+      console.error("❌ Fetch Error:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Fetch Failed",
+        text: "Could not load listing data."
+      });
     }
   });
+}
 
-}function fetchSummaryCards(reportDate) {
-  const requestData = {
-    reportdate: reportDate
+function renderCell(jsonData, field) {
+  let total = 0;
+  let values = [];
+
+  if (jsonData) {
+    try {
+      const parsed = JSON.parse(jsonData);
+      if (Array.isArray(parsed.data)) {
+        values = parsed.data.map(Number).filter(n => !isNaN(n));
+      } else if (!isNaN(parsed.data)) {
+        values = [Number(parsed.data)];
+      }
+      total = values.reduce((sum, v) => sum + v, 0);
+    } catch (e) {
+      console.warn("Invalid JSON:", jsonData, e);
+    }
+  }
+
+  // ✅ Just return total — no breakdown shown in small text
+  return `<td class="editable" data-field="${field}" data-values='${JSON.stringify(values)}'>
+            ${formatNumber(total)}
+          </td>`;
+}
+
+
+function formatNumber(value) {
+  const number = parseFloat(value);
+  return isNaN(number) ? "0" : new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(number);
+}
+// === QUANTITY MODAL HANDLING ===
+function updateTotal() {
+  let total = 0;
+  $(".qtyInput").each(function () {
+    const val = parseFloat($(this).val());
+    if (!isNaN(val)) total += val;
+  });
+  $("#totalLabel").text(`Total: ${total.toFixed(2)}`);
+}
+
+// On click editable quantity cell
+$("#dataTable").on("click", "td.editable", function () {
+  currentEditCell = $(this);
+  const field = currentEditCell.data("field");
+
+  const fieldLabels = {
+    indentQty: "Indent Qty",
+    availableQty: "Available Qty",
+    requiredQty: "Required Qty",
+    plannedQty: "Planned Qty",
+    packedQty: "Packed Qty",
+    dispatchedQty: "Dispatched Qty",
+    receivedQty: "Received Qty"
+  };
+
+  $("#fieldLabel").text(fieldLabels[field] || field);
+
+  let values = currentEditCell.data("values");
+  if (!values) {
+    const rawText = currentEditCell.text().trim().split("(")[1]?.replace(")", "") || "";
+    values = rawText.split("+").map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+  }
+
+  if (!Array.isArray(values)) values = [];
+
+  $("#editFieldContainer").empty();
+  values.forEach(val => {
+    $("#editFieldContainer").append(`
+      <div class="input-group mb-2 value-row">
+        <input type="number" class="form-control qtyInput" value="${val}" />
+        <button class="btn btn-danger removeVal" type="button">&times;</button>
+      </div>
+    `);
+  });
+
+  updateTotal();
+  $("#rowModal").modal("show");
+});
+
+// Add new value row
+$("#cloneRow").on("click", function () {
+  $("#editFieldContainer").append(`
+    <div class="input-group mb-2 value-row">
+      <input type="number" class="form-control qtyInput" />
+      <button class="btn btn-danger removeVal" type="button">&times;</button>
+    </div>
+  `);
+  updateTotal();
+});
+
+// Remove value row
+$("#editFieldContainer").on("click", ".removeVal", function () {
+  $(this).closest(".value-row").remove();
+  updateTotal();
+});
+
+// Update total on input change
+$("#editFieldContainer").on("input", ".qtyInput", updateTotal);
+
+// Save edited quantity
+$("#saveRowData").on("click", function () {
+  const values = $(".qtyInput").map(function () {
+    return parseFloat($(this).val()) || 0;
+  }).get().filter(v => v !== 0);
+
+  const total = values.reduce((a, b) => a + b, 0);
+
+  currentEditCell.data("values", values);
+  currentEditCell.html(`
+    ${total.toFixed(2)}
+    <br><small class="text-muted">(${values.join(" + ")})</small>
+  `);
+
+  const row = currentEditCell.closest("tr");
+  const code = row.find("td:nth-child(6)").text().trim();
+  const reportDate = row.find("td:nth-child(2)").text().trim();
+  const field = currentEditCell.data("field");
+
+  const payload = {
+    code: code,
+    field: field,
+    value: JSON.stringify({ data: values }),
+    date: reportDate
   };
 
   $.ajax({
-    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/summary",
+    url: "https://spring-app-sks.onrender.com/indentvsdelivery/updatefieldbycode",
+    method: "POST",
+    contentType: "application/json",
+    data: JSON.stringify(payload),
+    success: function (response) {
+      Swal.fire({
+        icon: "success",
+        title: "Updated Successfully ✅",
+        text: response || "Data updated successfully."
+      });
+
+      $("#rowModal").modal("hide");
+      fetchListingData();
+    },
+    error: function (err) {
+      console.error("❌ Failed to update quantity:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Update Failed ❌",
+        text: "Could not save the changes. Please try again."
+      });
+    }
+  });
+});
+
+// === REASON MODAL HANDLING ===
+
+$(document).on("click", ".reason-editable", function () {
+  currentReasonCell = $(this);
+  const currentReason = currentReasonCell.text().trim();
+  $("#reasonInput").val(currentReason);
+  $("#reasonModal").modal("show");
+});
+
+$("#saveReason").on("click", function (e) {
+  e.preventDefault();
+
+  const newReason = $("#reasonInput").val().trim();
+  if (!currentReasonCell) return;
+
+  const row = currentReasonCell.closest("tr");
+  const code = row.find("td:nth-child(6)").text().trim();
+  const reportDate = row.find("td:nth-child(2)").text().trim();
+  const colIndex = currentReasonCell.index();
+
+  // const reasonFields = {
+  //   10: "reason",
+  //   13: "plannedReason",
+  //   16: "packedReason",
+  //   19: "dispatchedReason",
+  //   22: "receivedReason"
+  // };
+
+
+  const field = currentReasonCell.data("field");
+  if (!field) return;
+
+  const payload = {
+    code: code,
+    field: field,
+    value: newReason,
+    date: reportDate
+  };
+
+  $.ajax({
+    url: "https://spring-app-sks.onrender.com/indentvsdelivery/updatereason",
+    method: "POST",
+    contentType: "application/json",
+    data: JSON.stringify(payload),
+    success: function () {
+      currentReasonCell.text(newReason);
+      Swal.fire({
+        icon: "success",
+        title: "Reason Updated ✅",
+        text: "Reason saved successfully."
+      });
+      $("#reasonModal").modal("hide");
+      fetchListingData();
+    },
+    error: function (err) {
+      console.error("❌ Failed to update reason:", err);
+      Swal.fire({
+        icon: "error",
+        title: "Update Failed ❌",
+        text: "Could not update reason. Try again."
+      });
+    }
+  });
+});
+
+// === SUMMARY CARDS ===
+function fetchSummaryCards(reportDate) {
+  if (!reportDate) {
+    $("#summaryCards").html("<div class='text-muted'>No report date to show summary.</div>");
+    return;
+  }
+
+  const requestData = { reportdate: reportDate };
+
+  $.ajax({
+    url: "https://spring-app-sks.onrender.com/indentvsdelivery/summary",
     method: "POST",
     contentType: "application/json",
     data: JSON.stringify(requestData),
@@ -351,20 +390,13 @@ function fetchListingData() {
       $("#summaryCards").html(`<div class="cards">${summaryHTML}</div>`);
     },
     error: function (err) {
-      console.error("Failed to fetch summary", err);
+      console.error("❌ Failed to fetch summary", err);
       $("#summaryCards").html("<div class='text-danger'>Failed to load summary</div>");
     }
   });
 }
 
-
-// Format number (no decimal) with commas
-function formatNumber(value) {
-  const number = parseFloat(value);
-  return isNaN(number) ? "0" : new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(number);
-}
-
-// Setup autocomplete for filters
+// === AUTOCOMPLETE FOR FILTERS ===
 function setupAutocomplete() {
   const extractUnique = (field) => [...new Set(rawData.map(r => r[field]).filter(Boolean))];
 
@@ -379,7 +411,6 @@ function setupAutocomplete() {
     const suggestions = extractUnique(key);
     const $input = $(`#${id}`);
     if ($input.length && suggestions.length) {
-      // ✅ Only destroy if initialized
       if ($input.data("ui-autocomplete")) {
         $input.autocomplete("destroy");
       }
@@ -394,60 +425,34 @@ function setupAutocomplete() {
   });
 }
 
-
-// Render cell with parsed JSON and total
-function renderCell(jsonData, field) {
-  let total = 0;
-  let values = [];
-
-  if (jsonData) {
-    try {
-      const parsed = JSON.parse(jsonData);
-      if (Array.isArray(parsed.data)) {
-        values = parsed.data.map(Number).filter(n => !isNaN(n));
-      } else if (!isNaN(parsed.data)) {
-        values = [Number(parsed.data)];
-      }
-      total = values.reduce((sum, v) => sum + v, 0);
-    } catch (e) {
-      console.warn("Invalid JSON:", jsonData, e);
-    }
-  }
-
-  const html = `${formatNumber(total)}`;
-  return `<td class="editable" data-field="${field}" data-values='${JSON.stringify(values)}'>${html}</td>`;
-}
-
-
-
-
 // === INDENT FILE UPLOAD ===
 $("#indentUploadForm").on("submit", function (e) {
   e.preventDefault();
   const file = $("#indentFile")[0].files[0];
-  if (!file) return alert("Please select a file.");
+  if (!file) {
+    return Swal.fire("Select File", "Please choose a file to upload.", "warning");
+  }
 
   const formData = new FormData();
   formData.append("file", file);
 
   $.ajax({
-    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/uploadindentvsdelivery", // Your backend API
+    url: "https://spring-app-sks.onrender.com/indentvsdelivery/uploadindentvsdelivery",
     method: "POST",
     processData: false,
     contentType: false,
     data: formData,
     success: function () {
-
       $("#indentModal").modal("hide");
+      Swal.fire("Success ✅", "Indent file uploaded.", "success");
       fetchListingData();
     },
     error: function (err) {
       console.error("❌ Indent upload failed:", err);
-      alert("Failed to upload Indent file.");
+      Swal.fire("Error ❌", "Failed to upload Indent file.", "error");
     }
   });
 });
-
 
 // === QUANTITY FILE UPLOAD ===
 $("#qtyUploadForm").on("submit", function (e) {
@@ -457,11 +462,7 @@ $("#qtyUploadForm").on("submit", function (e) {
   const quantityType = $("#quantityType").val();
 
   if (!file || !quantityType) {
-    return Swal.fire({
-      icon: 'warning',
-      title: 'Missing Input',
-      text: 'Please select both file and quantity type.'
-    });
+    return Swal.fire("Missing Input", "Please select both file and quantity type.", "warning");
   }
 
   const formData = new FormData();
@@ -469,14 +470,12 @@ $("#qtyUploadForm").on("submit", function (e) {
   formData.append("type", quantityType);
 
   $.ajax({
-    url: "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/uploadqty",
+    url: "https://spring-app-sks.onrender.com/indentvsdelivery/uploadqty",
     method: "POST",
     data: formData,
     processData: false,
     contentType: false,
-    xhrFields: {
-      responseType: 'blob' // Ensures file is treated as binary
-    },
+    xhrFields: { responseType: 'blob' },
     success: function (data, status, xhr) {
       const blob = new Blob([data], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -486,7 +485,6 @@ $("#qtyUploadForm").on("submit", function (e) {
       const a = document.createElement("a");
       a.href = url;
 
-      // Extract filename from headers
       const contentDisposition = xhr.getResponseHeader("Content-Disposition");
       const fileName = contentDisposition
         ? contentDisposition.split("filename=")[1].replace(/"/g, "")
@@ -498,105 +496,34 @@ $("#qtyUploadForm").on("submit", function (e) {
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      Swal.fire({
-        icon: "success",
-        title: "Uploaded Successfully ✅",
-        text: "Check the downloaded file for status details."
-      });
+      Swal.fire("Uploaded ✅", "Check the downloaded status file.", "success");
       fetchListingData();
-
       $("#qtyUploadModal").modal("hide");
     },
     error: function (err) {
-      console.error("Upload error:", err);
-      Swal.fire({
-        icon: "error",
-        title: "Upload Failed ❌",
-        text: "Something went wrong. Please try again."
-      });
+      console.error("❌ Upload error:", err);
+      Swal.fire("Upload Failed ❌", "Something went wrong. Please try again.", "error");
     }
   });
 });
 
-
-// === DOWNLOAD QUANTITY TEMPLATE ===
+// === DOWNLOAD TEMPLATE (QUANTITY) ===
 function downloadTemplate() {
   const type = document.getElementById("quantityType").value;
   if (!type) {
-    alert("Please select a Quantity Type before downloading template.");
+    Swal.fire("Select Type", "Please choose a Quantity Type before downloading.", "warning");
     return;
   }
 
   const formattedType = encodeURIComponent(type);
-  const url = `https://my-spring-app-ck1f.onrender.com/indentvsdelivery/qtytemplate?type=${formattedType}`;
+  const url = `https://spring-app-sks.onrender.com/indentvsdelivery/qtytemplate?type=${formattedType}`;
   window.open(url, "_blank");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const indentForm = document.getElementById("indentUploadForm");
-  const fileInput = document.getElementById("indentFile");
-
-  indentForm.addEventListener("submit", async function (e) {
-    e.preventDefault();
-
-    if (!fileInput.files.length) {
-      return Swal.fire({
-        icon: "warning",
-        title: "No File Selected",
-        text: "Please select an Excel file before uploading.",
-      });
-    }
-
-    const formData = new FormData();
-    formData.append("file", fileInput.files[0]);
-
-    try {
-      const response = await fetch("https://my-spring-app-ck1f.onrender.com/indentvsdelivery/uploadindentvsdelivery", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error("Upload failed");
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = "upload_status.xlsx";
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      document.body.removeChild(a);
-
-      await Swal.fire({
-        icon: "success",
-        title: "Uploaded Successfully ✅",
-        text: "Status file has been downloaded.",
-      });
-
-      const modalEl = document.getElementById("indentModal");
-      const modalInstance = bootstrap.Modal.getInstance(modalEl);
-      if (modalInstance) modalInstance.hide();
-      indentForm.reset();
-
-      if (typeof fetchListingData === "function") fetchListingData();
-
-    } catch (err) {
-      console.error("Upload error:", err);
-      Swal.fire({
-        icon: "error",
-        title: "Upload Failed ❌",
-        text: "An error occurred while uploading. Please try again.",
-      });
-    }
-  });
-});
-
-
-// ✅ Template Download
+// === DOWNLOAD TEMPLATE (OVERALL) ===
 function downloadOverallTemplate() {
   const a = document.createElement("a");
-  a.href = "https://my-spring-app-ck1f.onrender.com/indentvsdelivery/overalltemplate";
+  a.href = "https://spring-app-sks.onrender.com/indentvsdelivery/overalltemplate";
   a.download = "overall_indent_template.xlsx";
   a.click();
 }

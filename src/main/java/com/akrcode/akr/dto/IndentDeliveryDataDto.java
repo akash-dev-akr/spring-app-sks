@@ -1,6 +1,7 @@
 package com.akrcode.akr.dto;
 
 import java.time.LocalDate;
+import java.util.Date;
 
 public class IndentDeliveryDataDto {
 	private int id;
@@ -30,6 +31,8 @@ public class IndentDeliveryDataDto {
 	private String dispatchedReason;
 	private String receivedDifference;
 	private String receivedReason;
+	private Date created_at;
+	private Date updated_at;
 
 	public int getId() {
 		return id;
@@ -43,8 +46,8 @@ public class IndentDeliveryDataDto {
 		return reportDate;
 	}
 
-	public void setReportDate(LocalDate localDate) {
-		this.reportDate = localDate;
+	public void setReportDate(LocalDate reportDate) {
+		this.reportDate = reportDate;
 	}
 
 	public String getCategory() {
@@ -221,6 +224,22 @@ public class IndentDeliveryDataDto {
 
 	public void setReceivedReason(String receivedReason) {
 		this.receivedReason = receivedReason;
+	}
+
+	public Date getCreated_at() {
+		return created_at;
+	}
+
+	public void setCreated_at(Date created_at) {
+		this.created_at = created_at;
+	}
+
+	public Date getUpdated_at() {
+		return updated_at;
+	}
+
+	public void setUpdated_at(Date updated_at) {
+		this.updated_at = updated_at;
 	}
 
 }
